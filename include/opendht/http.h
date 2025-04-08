@@ -230,6 +230,9 @@ public:
     using OnJsonCb = std::function<void(Json::Value value, const Response& response)>;
     using OnDoneCb = std::function<void(const Response& response)>;
 
+    using ErrorLogCb = std::function<void(const std::string& log)>;
+    void set_error_log_cb(ErrorLogCb cb);
+
     // resolves implicitly
     Request(asio::io_context& ctx, const std::string& url, const Json::Value& json, OnJsonCb jsoncb,
             std::shared_ptr<log::Logger> logger = {});

@@ -93,6 +93,10 @@ public:
      * @return The time for the next job to run.
      */
     time_point run() {
+        // @stats
+        numExpiredTimers = 0;
+        numJobsDone = 0;
+
         while (not timers.empty()) {
             auto timer = timers.begin();
             /*
@@ -105,9 +109,12 @@ public:
 
             auto job = std::move(timer->second);
             timers.erase(timer);
+            ++numExpiredTimers;
 
-            if (job->do_)
+            if (job->do_) {
                 job->do_();
+                ++numJobsDone;
+            }
         }
         return getNextJobTime();
     }
@@ -123,6 +130,10 @@ public:
     inline const time_point& time() const { return now; }
     inline time_point syncTime() { return (now = clock::now()); }
     inline void syncTime(const time_point& n) { now = n; }
+
+    // @stats
+    uint32_t numExpiredTimers;
+    uint32_t numJobsDone;
 
 private:
     time_point now {clock::now()};

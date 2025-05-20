@@ -634,8 +634,16 @@ DhtRunner::setLocalCertificateStore(CertificateStoreQuery&& query_method) {
 time_point
 DhtRunner::loop_()
 {
+    // @stats
+    static uint64_t loop_iteration;
+    static uint64_t total_bytes;
+
     if (not dht_)
         return {};
+
+    // @stats
+    ++loop_iteration;
+    auto loop_start = clock::now();
 
     decltype(pending_ops) ops {};
     {
@@ -644,6 +652,10 @@ DhtRunner::loop_()
         ops = (pending_ops_prio.empty() && (s == NodeStatus::Connected or s == NodeStatus::Disconnected or running == State::Stopping)) ?
                std::move(pending_ops) : std::move(pending_ops_prio);
     }
+
+    // @stats
+    auto ops_count = ops.size();
+
     while (not ops.empty()) {
         ops.front()(*dht_);
         ops.pop();
@@ -657,6 +669,10 @@ DhtRunner::loop_()
         // move to stack
         received = std::move(rcv);
     }
+
+    // @stats
+    auto received_count = received.size();
+    size_t bytes = 0;
 
     // Discard old packets
     size_t dropped {0};
@@ -677,8 +693,12 @@ DhtRunner::loop_()
             auto now = clock::now();
             if (now - pkt.received > net::RX_QUEUE_MAX_DELAY)
                 dropped++;
-            else
+            else {
+                // @stats
+                bytes += pkt.data.size();
+
                 wakeup = dht_->periodic(pkt.data.data(), pkt.data.size(), std::move(pkt.from), now);
+            }
             pkt.data.clear();
         }
         received_treated.splice(received_treated.end(), std::move(received));
@@ -693,9 +713,6 @@ DhtRunner::loop_()
             rcv_free.splice(rcv_free.end(), std::move(received_treated));
     }
 
-    if (dropped && logger_)
-        logger_->e("[runner %p] Dropped %zu packets with high delay.", fmt::ptr(this), dropped);
-
     NodeStatus nstatus4 = dht_->updateStatus(AF_INET);
     NodeStatus nstatus6 = dht_->updateStatus(AF_INET6);
     if (nstatus4 != status4 || nstatus6 != status6) {
@@ -704,6 +721,15 @@ DhtRunner::loop_()
         for (auto& cb : statusCbs){
             cb(status4, status6);
         }
+    }
+
+    // @stats
+    auto loop_end = clock::now();
+    auto loop_duration = std::chrono::duration_cast<std::chrono::microseconds>(loop_end - loop_start);
+    total_bytes += bytes;
+    if (logger_) {
+        logger_->warn("@@@ loop:{:6d} status:{}{} time:{:6d} ops:{:2d} dropped:{:2d} treated:{:2d} bytes:{:5d} total:{:9d}",
+                      loop_iteration, static_cast<int>(status4), static_cast<int>(status6), loop_duration.count(), ops_count, dropped, received_count - dropped, bytes, total_bytes);
     }
 
     return wakeup;

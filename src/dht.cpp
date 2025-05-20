@@ -2028,15 +2028,31 @@ time_point
 Dht::periodic(const uint8_t *buf, size_t buflen, SockAddr from, const time_point& now)
 {
     scheduler.syncTime(now);
+
+    net::ProcessMessageResult result = net::ProcessMessageResult::Unknown;
+    net::MessageType type = net::MessageType::Error;
+    auto process_start = clock::now();
     if (buflen) {
         try {
-            network_engine.processMessage(buf, buflen, std::move(from));
+            result = network_engine.processMessage(buf, buflen, std::move(from));
         } catch (const std::exception& e) {
             if (logger_)
                 logger_->w("Unable to process message: %s", e.what());
         }
+        type = network_engine.lastProcessMessageType;
     }
-    return scheduler.run();
+    auto process_end = clock::now();
+    auto process_duration = std::chrono::duration_cast<std::chrono::microseconds>(process_end - process_start).count();
+
+    auto scheduler_start = clock::now();
+    auto nextWakeup = scheduler.run();
+    auto scheduler_end = clock::now();
+    auto scheduler_duration = std::chrono::duration_cast<std::chrono::microseconds>(scheduler_end - scheduler_start).count();
+    if (logger_)
+        logger_->warn("@@@ process (time:{:3d} res:{:2d} type:{:2d})  scheduler (time:{:3d} timers:{:2d} jobs:{:2d})",
+                      process_duration, static_cast<int>(result), static_cast<int>(type),
+                      scheduler_duration, scheduler.numExpiredTimers, scheduler.numJobsDone);
+    return nextWakeup;
 }
 
 void

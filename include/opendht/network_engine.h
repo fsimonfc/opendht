@@ -43,6 +43,7 @@ namespace net {
 struct Request;
 struct Socket;
 struct TransId;
+enum class MessageType;
 
 #ifndef MSG_CONFIRM
 #define MSG_CONFIRM 0
@@ -103,6 +104,24 @@ struct RequestAnswer {
     std::vector<Sp<Node>> nodes6 {};
     RequestAnswer() {}
     RequestAnswer(ParsedMessage&& msg);
+};
+
+// @stats
+enum class ProcessMessageResult {
+    Unknown = 0,
+    SuccessCompleteMessage,
+    SuccessExistingPartialMessage,
+    SuccessNewPartialMessage,
+    IgnoredMartian,
+    IgnoredBlacklisted,
+    IgnoredOtherNetwork,
+    IgnoredSelf,
+    IgnoredRateLimited,
+    ErrorMessageParsing,
+    ErrorPartialMessageNotFound,
+    ErrorPartialMessageUnexpectedAddress,
+    ErrorProcessException,
+    ErrorPartialMessageAlreadyExists,
 };
 
 /*!
@@ -440,7 +459,7 @@ public:
      * @param fromlen  The length of the corresponding sockaddr structure.
      * @param now  The time to adjust the clock in the network engine.
      */
-    void processMessage(const uint8_t *buf, size_t buflen, SockAddr addr);
+    ProcessMessageResult processMessage(const uint8_t *buf, size_t buflen, SockAddr addr);
 
     Sp<Node> insertNode(const InfoHash& id, const SockAddr& addr) {
         auto n = cache.getNode(id, addr, scheduler.time(), 0);
@@ -475,6 +494,9 @@ public:
     size_t getPartialCount() const {
         return partial_messages.size();
     }
+
+    // @stats
+    MessageType lastProcessMessageType;
 
 private:
 

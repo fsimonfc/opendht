@@ -407,20 +407,23 @@ NetworkEngine::isNodeBlacklisted(const SockAddr& addr) const
     return blacklist.find(addr) != blacklist.end();
 }
 
-void
+ProcessMessageResult
 NetworkEngine::processMessage(const uint8_t *buf, size_t buflen, SockAddr f)
 {
+    // @stats
+    lastProcessMessageType = MessageType::Error;
+
     auto from = f.getMappedIPv4();
     if (isMartian(from)) {
         if (logger_)
             logger_->w("Received packet from martian node %s", from.toString().c_str());
-        return;
+        return ProcessMessageResult::IgnoredMartian;
     }
 
     if (isNodeBlacklisted(from)) {
         if (logger_)
             logger_->w("Received packet from blacklisted node %s", from.toString().c_str());
-        return;
+        return ProcessMessageResult::IgnoredBlacklisted;
     }
 
     auto msg = std::make_unique<ParsedMessage>();
@@ -432,13 +435,15 @@ NetworkEngine::processMessage(const uint8_t *buf, size_t buflen, SockAddr f)
             logger_->w("Can't parse message of size %lu: %s", buflen, e.what());
         // if (logger_)
         //     logger_->DBG.logPrintable(buf, buflen);
-        return;
+        return ProcessMessageResult::ErrorMessageParsing;
     }
+
+    lastProcessMessageType = msg->type;
 
     if (msg->network != config.network) {
         if (logger_)
             logger_->d("Received message from other config.network %u", msg->network);
-        return;
+        return ProcessMessageResult::IgnoredOtherNetwork;
     }
 
     const auto& now = scheduler.time();
@@ -451,13 +456,13 @@ NetworkEngine::processMessage(const uint8_t *buf, size_t buflen, SockAddr f)
                 if (logger_)
                     logger_->d("Can't find partial message");
             rateLimit(from);
-            return;
+            return ProcessMessageResult::ErrorPartialMessageNotFound;
         }
         if (!pmsg_it->second.from.equals(from)) {
             if (logger_)
                 logger_->d("Received partial message data from unexpected IP address");
             rateLimit(from);
-            return;
+            return ProcessMessageResult::ErrorPartialMessageUnexpectedAddress;
         }
         // append data block
         if (pmsg_it->second.msg->append(*msg)) {
@@ -465,22 +470,25 @@ NetworkEngine::processMessage(const uint8_t *buf, size_t buflen, SockAddr f)
             // check data completion
             if (pmsg_it->second.msg->complete()) {
                 try {
+                    lastProcessMessageType = pmsg_it->second.msg->type;
+
                     // process the full message
                     process(std::move(pmsg_it->second.msg), from);
                     partial_messages.erase(pmsg_it);
+                    return ProcessMessageResult::SuccessCompleteMessage;
                 } catch (...) {
-                    return;
+                    return ProcessMessageResult::ErrorProcessException;
                 }
             } else
                 scheduler.add(now + RX_TIMEOUT, std::bind(&NetworkEngine::maintainRxBuffer, this, msg->tid));
         }
-        return;
+        return ProcessMessageResult::SuccessExistingPartialMessage;
     }
 
     if (msg->id == myid or not msg->id) {
         if (logger_)
             logger_->d("Received message from self");
-        return;
+        return ProcessMessageResult::IgnoredSelf;
     }
 
     if (msg->type > MessageType::Reply) {
@@ -488,15 +496,16 @@ NetworkEngine::processMessage(const uint8_t *buf, size_t buflen, SockAddr f)
         if (!rateLimit(from)) {
             if (logger_)
                 logger_->w("Dropping request due to rate limiting");
-            return;
+            return ProcessMessageResult::IgnoredRateLimited;
         }
     }
 
     if (msg->value_parts.empty()) {
         try {
             process(std::move(msg), from);
+            return ProcessMessageResult::SuccessCompleteMessage;
         } catch(...) {
-            return;
+            return ProcessMessageResult::ErrorProcessException;
         }
     } else {
         // starting partial message session
@@ -509,8 +518,10 @@ NetworkEngine::processMessage(const uint8_t *buf, size_t buflen, SockAddr f)
             pmsg.last_part = now;
             scheduler.add(now + RX_MAX_PACKET_TIME, std::bind(&NetworkEngine::maintainRxBuffer, this, k));
             scheduler.add(now + RX_TIMEOUT, std::bind(&NetworkEngine::maintainRxBuffer, this, k));
+            return ProcessMessageResult::SuccessNewPartialMessage;
         } else if (logger_)
             logger_->e("Partial message with given TID %u already exists", k);
+        return ProcessMessageResult::ErrorPartialMessageAlreadyExists;
     }
 }
 

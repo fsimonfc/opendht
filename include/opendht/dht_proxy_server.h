@@ -329,6 +329,7 @@ private:
 
 #ifdef OPENDHT_PUSH_NOTIFICATIONS
     PushType getTypeFromString(const std::string& type);
+    std::string getStringFromType(PushType type);
     std::string getDefaultTopic(PushType type);
 
     RequestStatus pingPush(restinio::request_handle_t request,
@@ -411,6 +412,7 @@ private:
 
     template <typename Is>
     void loadState(Is& is, size_t size);
+    void printState(std::ifstream& is, size_t size);
 
     std::shared_ptr<asio::io_context> ioContext_;
     std::shared_ptr<DhtRunner> dht_;
@@ -449,6 +451,7 @@ private:
     // Connection Listener observing conn state changes.
     std::shared_ptr<ConnectionListener> connListener_;
     struct PermanentPut {
+        std::time_t expirationAbsolute;
         time_point expiration;
         std::string pushToken;
         std::string clientId;
@@ -498,6 +501,7 @@ private:
 
 #ifdef OPENDHT_PUSH_NOTIFICATIONS
     struct Listener {
+        std::time_t expirationAbsolute;
         time_point expiration;
         std::string clientId;
         std::shared_ptr<PushSessionContext> sessionCtx;

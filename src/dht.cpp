@@ -2659,6 +2659,30 @@ Dht::loadState(const std::string& path)
         msgpack::object_handle oh;
         if (pac.next(oh)) {
             auto state = oh.get().as<DhtState>();
+            fmt::print(stderr,
+                       "DHT state:\n"
+                       "  Summary:\n"
+                       "         v: {}\n"
+                       "        id: {}\n"
+                       "     nodes: {}\n"
+                       "    values: {}\n",
+                       state.v,
+                       state.id.toString(),
+                       state.nodes.size(),
+                       state.values.size());
+            fmt::print(stderr, "  Details:\n");
+            int node_count = 0;
+            for (const auto& node : state.nodes) {
+                fmt::print(stderr, "    node {:2d}: (id: {}, addr: {})\n",
+                           ++node_count, node.id.toString(), node.addr.toString());
+            }
+            //int value_count = 0;
+            //for (const auto& value : state.values) {
+            //    fmt::print(stderr, "    value {:4d}: (id: {}, size: {:4d})\n",
+            //               ++value_count, value.first.toString(), value.second.size());
+            //}
+            fmt::print(stderr, "End DHT State\n\n");
+
             if (logger_)
                 logger_->d("Importing %zu nodes", state.nodes.size());
             if (state.id)

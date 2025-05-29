@@ -169,7 +169,8 @@ DhtProxyServer::PermanentPut::msgpack_unpack(const msgpack::object& o)
         clientId = cid->as<std::string>();
     }
     if (auto exp = findMapValue(o, "exp"sv)) {
-        expiration = from_time_t(exp->as<time_t>());
+        expirationAbsolute = exp->as<time_t>();
+        expiration = from_time_t(expirationAbsolute);
     }
     if (auto token = findMapValue(o, "token"sv)) {
         pushToken = token->as<std::string>();
@@ -199,7 +200,8 @@ DhtProxyServer::Listener::msgpack_unpack(const msgpack::object& o)
         clientId = cid->as<std::string>();
     }
     if (auto exp = findMapValue(o, "exp"sv)) {
-        expiration = from_time_t(exp->as<time_t>());
+        expirationAbsolute = exp->as<time_t>();
+        expiration = from_time_t(expirationAbsolute);
     }
     if (auto sid = findMapValue(o, "sid"sv)) {
         if (not sessionCtx)
@@ -331,7 +333,8 @@ DhtProxyServer::DhtProxyServer(const std::shared_ptr<DhtRunner>& dht,
                 stateFile.seekg(0, std::ios::beg);
                 if (logger_)
                     logger_->d("Loading proxy state from %.*s (%td bytes)", (int)persistPath_.size(), persistPath_.c_str(), size);
-                loadState(stateFile, size);
+                printState(stateFile, size);
+                //loadState(stateFile, size);
             }
         } catch (const std::exception& e) {
             if (logger_)
@@ -454,6 +457,83 @@ DhtProxyServer::loadState(Is& is, size_t size) {
     }
 }
 
+void
+DhtProxyServer::printState(std::ifstream& is, size_t size) {
+    fmt::print(stderr, "Proxy state:\n");
+    msgpack::unpacker pac;
+    pac.reserve_buffer(size);
+    if (is.read(pac.buffer(), size)) {
+        pac.buffer_consumed(size);
+
+        msgpack::object_handle oh;
+        while (pac.next(oh)) {
+            if (oh.get().type != msgpack::type::MAP)
+                continue;
+            if (auto putsObject = findMapValue(oh.get(), "puts"sv)) {
+                auto puts = putsObject->as<decltype(puts_)>();
+                fmt::print(stderr, "  Persistent puts: {}\n", puts.size());
+                int put_index = 0;
+                for (auto& put : puts) {
+                    ++put_index;
+                    auto infoHash = put.first.toString();
+                    for (auto& pput : put.second.puts) {
+                        auto vid = pput.first;
+                        auto vtype = pput.second.value->type;
+                        bool is_signed = pput.second.value->isSigned();
+                        bool is_encrypted = pput.second.value->isEncrypted();
+                        auto size = pput.second.value->size();
+                        auto clientId = pput.second.clientId;
+                        auto sessionId = pput.second.sessionCtx ? pput.second.sessionCtx->sessionId : "";
+                        auto pushToken = pput.second.pushToken.substr(0, 28);
+                        if (pushToken.size() < pput.second.pushToken.size()) pushToken += "...";
+                        auto type = getStringFromType(pput.second.type);
+                        auto topic = pput.second.topic;
+                        auto expiration = std::chrono::system_clock::from_time_t(pput.second.expirationAbsolute);
+
+                        fmt::print(stderr,
+                                   "    [{:3d}] hash: {}  val: (id: {:20d}  typ: {}{:1s}{:1s}  size: {:4d})  exp: {}  client: {:16s}  sess: {:8s}  typ: {}  topic: {:25s}  tok: {}\n",
+                                   put_index, infoHash, vid, vtype,
+                                   is_signed ? "s" : "",
+                                   is_encrypted ? "e" : "",
+                                   size, expiration, clientId, sessionId, type, topic, pushToken);
+                    }
+                }
+            } else {
+                fmt::print(stderr, "  No persistent puts\n");
+            }
+#ifdef OPENDHT_PUSH_NOTIFICATIONS
+            if (auto pushListeners = findMapValue(oh.get(), "pushListeners"sv)) {
+                std::lock_guard<std::mutex> lock(lockListener_);
+                pushListeners_ = pushListeners->as<decltype(pushListeners_)>();
+                fmt::print(stderr, "  Push listeners: {}\n", pushListeners_.size());
+                int pushListener_index = 0;
+                for (auto& pushListener : pushListeners_) {
+                    ++pushListener_index;
+                    for (auto& listeners : pushListener.second.listeners) {
+                        auto infoHash = listeners.first.toString();
+                        for (auto& listener : listeners.second) {
+                            auto clientId = listener.clientId;
+                            auto sessionId = listener.sessionCtx ? listener.sessionCtx->sessionId : "";
+                            auto pushToken = pushListener.first.substr(0, 64);
+                            if (pushToken.size() < pushListener.first.size()) pushToken += "...";
+                            auto type = getStringFromType(listener.type);
+                            auto topic = listener.topic;
+                            auto expiration = std::chrono::system_clock::from_time_t(listener.expirationAbsolute);
+
+                            fmt::print(stderr, "    [{:3d}] hash: {}  expiration: {}  client: {:16s}  session: {:8s}  type: {}  topic: {:25s}  token: {}\n",
+                                       pushListener_index, infoHash, expiration, clientId, sessionId, type, topic, pushToken);
+                        }
+                    }
+                }
+            } else {
+                fmt::print(stderr, "No push listeners\n");
+            }
+#endif
+        }
+        fmt::print(stderr, "End proxy state\n");
+    }
+    exit(0);
+}
 
 asio::io_context&
 DhtProxyServer::io_context() const
@@ -772,6 +852,21 @@ DhtProxyServer::getTypeFromString(const std::string& type) {
     else if (type == "unifiedpush")
         return PushType::UnifiedPush;
     return PushType::None;
+}
+
+std::string
+DhtProxyServer::getStringFromType(PushType type)
+{
+    switch (type) {
+        case PushType::None:
+            return "---";
+        case PushType::Android:
+            return "And";
+        case PushType::iOS:
+            return "iOS";
+        case PushType::UnifiedPush:
+            return "Uni";
+    }
 }
 
 std::string

@@ -169,7 +169,7 @@ DhtProxyServer::PermanentPut::msgpack_unpack(const msgpack::object& o)
         clientId = cid->as<std::string>();
     }
     if (auto exp = findMapValue(o, "exp"sv)) {
-        expiration = from_time_t(exp->as<time_t>());
+        expiration = exp->as<time_t>();
     }
     if (auto token = findMapValue(o, "token"sv)) {
         pushToken = token->as<std::string>();
@@ -199,7 +199,7 @@ DhtProxyServer::Listener::msgpack_unpack(const msgpack::object& o)
         clientId = cid->as<std::string>();
     }
     if (auto exp = findMapValue(o, "exp"sv)) {
-        expiration = from_time_t(exp->as<time_t>());
+        expiration = exp->as<time_t>();
     }
     if (auto sid = findMapValue(o, "sid"sv)) {
         if (not sessionCtx)
@@ -217,19 +217,22 @@ DhtProxyServer::Listener::msgpack_unpack(const msgpack::object& o)
 #endif
 
 DhtProxyServer::DhtProxyServer(const std::shared_ptr<DhtRunner>& dht,
+        std::unique_ptr<AbstractTime> time,
         const ProxyServerConfig& config,
         const std::shared_ptr<dht::Logger>& logger
 )
     :   ioContext_(std::make_shared<asio::io_context>()),
-        dht_(dht), persistPath_(config.persistStatePath), logger_(logger),
+        dht_(dht), time_(std::move(time)), persistPath_(config.persistStatePath), logger_(logger),
         printStatsTimer_(std::make_unique<asio::steady_timer>(*ioContext_, 3s)),
-        serverStartTime_(clock::now()),
+        serverStartTime_(time_->steadyNow()),
         connListener_(std::make_shared<ConnectionListener>(std::bind(&DhtProxyServer::onConnectionClosed, this, std::placeholders::_1))),
         pushServer_(config.pushServer),
         bundleId_(config.bundleId)
 {
     if (not dht_)
         throw std::invalid_argument("A DHT instance must be provided");
+    if (not time_)
+        throw std::invalid_argument("An AbstractTime instance must be provided");
 
     if (logger_)
         logger_->d("[proxy:server] [init] running on %i", config.port);
@@ -378,7 +381,8 @@ DhtProxyServer::loadState(Is& is, size_t size) {
                     logger_->d("Loading %zu persistent puts", puts_.size());
                 for (auto& put : puts_) {
                     for (auto& pput : put.second.puts) {
-                        pput.second.expireTimer = std::make_unique<asio::steady_timer>(io_context(), pput.second.expiration);
+                        auto expiration = time_->from_time_t(pput.second.expiration);
+                        pput.second.expireTimer = std::make_unique<asio::steady_timer>(io_context(), expiration);
                         pput.second.expireTimer->async_wait(std::bind(&DhtProxyServer::handleCancelPermamentPut, this,
                                                 std::placeholders::_1, put.first, pput.first));
 #ifdef OPENDHT_PUSH_NOTIFICATIONS
@@ -394,7 +398,7 @@ DhtProxyServer::loadState(Is& is, size_t size) {
                                 }
                                 return json;
                             };
-                            pput.second.expireNotifyTimer = std::make_unique<asio::steady_timer>(io_context(), pput.second.expiration - proxy::OP_MARGIN);
+                            pput.second.expireNotifyTimer = std::make_unique<asio::steady_timer>(io_context(), expiration - proxy::OP_MARGIN);
                             pput.second.expireNotifyTimer->async_wait(std::bind(
                                 &DhtProxyServer::handleNotifyPushListenExpire, this,
                                 std::placeholders::_1, pput.second.pushToken, std::move(jsonProvider), pput.second.type, pput.second.topic));
@@ -425,7 +429,8 @@ DhtProxyServer::loadState(Is& is, size_t size) {
                                 }
                             );
                             // expire notify
-                            listener.expireNotifyTimer = std::make_unique<asio::steady_timer>(io_context(), listener.expiration - proxy::OP_MARGIN);
+                            auto expiration = time_->from_time_t(listener.expiration);
+                            listener.expireNotifyTimer = std::make_unique<asio::steady_timer>(io_context(), expiration - proxy::OP_MARGIN);
                             auto jsonProvider = [infoHash = listeners.first.toString(), clientId = listener.clientId, sessionCtx = listener.sessionCtx](){
                                 Json::Value json;
                                 json["timeout"] = infoHash;
@@ -437,7 +442,7 @@ DhtProxyServer::loadState(Is& is, size_t size) {
                             listener.expireNotifyTimer->async_wait(std::bind(&DhtProxyServer::handleNotifyPushListenExpire, this,
                                                                 std::placeholders::_1, pushListener.first, std::move(jsonProvider), listener.type, listener.topic));
                             // cancel push listen
-                            listener.expireTimer = std::make_unique<asio::steady_timer>(io_context(), listener.expiration);
+                            listener.expireTimer = std::make_unique<asio::steady_timer>(io_context(), expiration);
                             listener.expireTimer->async_wait(std::bind(&DhtProxyServer::handleCancelPushListen, this,
                                                             std::placeholders::_1, pushListener.first, listeners.first, listener.clientId));
                         }
@@ -534,7 +539,7 @@ DhtProxyServer::addServerSettings(ServerSettings& settings, const unsigned int m
 std::shared_ptr<DhtProxyServer::ServerStats>
 DhtProxyServer::updateStats(std::shared_ptr<NodeInfo> info) const
 {
-    auto now = clock::now();
+    auto now = time_->steadyNow();
     auto last = lastStatsReset_.exchange(now);
     auto count = requestNum_.exchange(0);
     auto dt = std::chrono::duration<double>(now - last);
@@ -684,7 +689,7 @@ DhtProxyServer::getStats(restinio::request_handle_t request,
     try {
         if (auto stats = stats_) {
             auto response = initHttpResponse(request->create_response());
-            response.append_body(Json::writeString(jsonBuilder_, stats->toJson()) + "\n");
+            response.append_body(Json::writeString(jsonBuilder_, toJson(stats)) + "\n");
             return response.done();
         } else {
             auto response = initHttpResponse(request->create_response(restinio::status_service_unavailable()));
@@ -875,7 +880,7 @@ DhtProxyServer::subscribe(restinio::request_handle_t request,
 
         // Expiration
         auto timeout = std::chrono::steady_clock::now() + proxy::OP_TIMEOUT;
-        listener.expiration = timeout;
+        listener.expiration = time_->to_time_t(timeout);
         listener.type = type;
         listener.topic = topic;
         if (listener.expireNotifyTimer)
@@ -1292,7 +1297,7 @@ DhtProxyServer::put(restinio::request_handle_t request,
                 auto vid = value->id;
                 auto& pput = sPuts.puts[vid];
                 pput.value = value;
-                pput.expiration = timeout;
+                pput.expiration = time_->to_time_t(timeout);
                 if (not pput.expireTimer) {
                     // cancel permanent put
                     pput.expireTimer = std::make_unique<asio::steady_timer>(io_context(), timeout);

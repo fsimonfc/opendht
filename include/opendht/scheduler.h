@@ -35,6 +35,14 @@ namespace dht {
  */
 class Scheduler {
 public:
+    Scheduler(AbstractTime *time)
+    : time_(time)
+    , now(time_->steadyNow())
+    {
+        if (!time_)
+            throw std::invalid_argument("Scheduler requires a valid AbstractTime instance");
+    }
+
     struct Job {
         Job(std::function<void()>&& f, time_point t) : do_(std::move(f)), t_(t) {}
         std::function<void()> do_;
@@ -121,11 +129,12 @@ public:
      * operations.
      */
     inline const time_point& time() const { return now; }
-    inline time_point syncTime() { return (now = clock::now()); }
+    inline time_point syncTime() { return (now = time_->steadyNow()); }
     inline void syncTime(const time_point& n) { now = n; }
 
 private:
-    time_point now {clock::now()};
+    AbstractTime *time_;
+    time_point now;
     std::multimap<time_point, Sp<Job>> timers {}; /* the jobs ordered by time */
 };
 

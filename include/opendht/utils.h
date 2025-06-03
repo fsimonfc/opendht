@@ -82,8 +82,14 @@ using system_clock = std::chrono::system_clock;
 using time_point = clock::time_point;
 using duration = clock::duration;
 
-time_point from_time_t(std::time_t t);
-std::time_t to_time_t(time_point t);
+class OPENDHT_PUBLIC AbstractTime {
+public:
+    virtual ~AbstractTime() = default;
+
+    virtual time_point steadyNow() = 0;
+    virtual time_point from_time_t(std::time_t t) = 0;
+    virtual std::time_t to_time_t(time_point t) = 0;
+};
 
 template <class DT>
 static std::string

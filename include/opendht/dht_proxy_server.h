@@ -28,6 +28,7 @@
 #include "sockaddr.h"
 #include "value.h"
 #include "http.h"
+#include "real_time.h"
 
 #include <restinio/all.hpp>
 #include <restinio/tls.hpp>
@@ -86,6 +87,7 @@ public:
      * it will fails silently
      */
     DhtProxyServer(const std::shared_ptr<DhtRunner>& dht,
+        std::unique_ptr<AbstractTime> time,
         const ProxyServerConfig& config = {},
         const std::shared_ptr<log::Logger>& logger = {});
 
@@ -97,9 +99,6 @@ public:
     DhtProxyServer& operator=(DhtProxyServer&& other) = delete;
 
     asio::io_context& io_context() const;
-
-    using clock = std::chrono::steady_clock;
-    using time_point = clock::time_point;
 
     struct PushStats {
         uint64_t highPriorityCount {0};
@@ -167,27 +166,23 @@ public:
             }
             return ret;
         }
-
-        /**
-         * Build a json object from a NodeStats
-         */
-        Json::Value toJson() const {
-            Json::Value result;
-            result["listenCount"] = static_cast<Json::UInt64>(listenCount);
-            result["putCount"] = static_cast<Json::UInt64>(putCount);
-            result["totalPermanentPuts"] = static_cast<Json::UInt64>(totalPermanentPuts);
-            result["pushListenersCount"] = static_cast<Json::UInt64>(pushListenersCount);
-            result["serverStartTime"] = static_cast<Json::LargestInt>(to_time_t(serverStartTime));
-            result["lastUpdated"] = static_cast<Json::LargestInt>(to_time_t(lastUpdated));
-            result["androidPush"] = androidPush.toJson();
-            result["iosPush"] = iosPush.toJson();
-            result["unifiedPush"] = unifiedPush.toJson();
-            result["requestRate"] = requestRate;
-            if (nodeInfo)
-                result["nodeInfo"] = nodeInfo->toJson();
-            return result;
-        }
     };
+    Json::Value toJson(std::shared_ptr<ServerStats> stats) const {
+        Json::Value result;
+        result["listenCount"] = static_cast<Json::UInt64>(stats->listenCount);
+        result["putCount"] = static_cast<Json::UInt64>(stats->putCount);
+        result["totalPermanentPuts"] = static_cast<Json::UInt64>(stats->totalPermanentPuts);
+        result["pushListenersCount"] = static_cast<Json::UInt64>(stats->pushListenersCount);
+        result["serverStartTime"] = static_cast<Json::LargestInt>(time_->to_time_t(stats->serverStartTime));
+        result["lastUpdated"] = static_cast<Json::LargestInt>(time_->to_time_t(stats->lastUpdated));
+        result["androidPush"] = stats->androidPush.toJson();
+        result["iosPush"] = stats->iosPush.toJson();
+        result["unifiedPush"] = stats->unifiedPush.toJson();
+        result["requestRate"] = stats->requestRate;
+        if (stats->nodeInfo)
+            result["nodeInfo"] = stats->nodeInfo->toJson();
+        return result;
+    }
 
     std::shared_ptr<ServerStats> stats() const { return stats_; }
 
@@ -414,6 +409,7 @@ private:
 
     std::shared_ptr<asio::io_context> ioContext_;
     std::shared_ptr<DhtRunner> dht_;
+    std::unique_ptr<AbstractTime> time_;
     Json::StreamWriterBuilder jsonBuilder_;
     Json::CharReaderBuilder jsonReaderBuilder_;
     std::mt19937_64 rd {crypto::getSeededRandomEngine<std::mt19937_64>()};
@@ -449,7 +445,7 @@ private:
     // Connection Listener observing conn state changes.
     std::shared_ptr<ConnectionListener> connListener_;
     struct PermanentPut {
-        time_point expiration;
+        std::time_t expiration;
         std::string pushToken;
         std::string clientId;
         std::shared_ptr<PushSessionContext> sessionCtx;
@@ -464,7 +460,7 @@ private:
         {
             p.pack_map(2 + (sessionCtx ? 1 : 0) + (clientId.empty() ? 0 : 1) + (type == PushType::None ? 0 : 2) + (topic.empty() ? 0 : 1));
             p.pack("value"); p.pack(value);
-            p.pack("exp"); p.pack(to_time_t(expiration));
+            p.pack("exp"); p.pack(expiration);
             if (not clientId.empty()) {
                 p.pack("cid"); p.pack(clientId);
             }
@@ -498,7 +494,7 @@ private:
 
 #ifdef OPENDHT_PUSH_NOTIFICATIONS
     struct Listener {
-        time_point expiration;
+        std::time_t expiration;
         std::string clientId;
         std::shared_ptr<PushSessionContext> sessionCtx;
         std::future<size_t> internalToken;
@@ -512,7 +508,7 @@ private:
         {
             p.pack_map(3 + (sessionCtx ? 1 : 0) + (topic.empty() ? 0 : 1));
             p.pack("cid"); p.pack(clientId);
-            p.pack("exp"); p.pack(to_time_t(expiration));
+            p.pack("exp"); p.pack(expiration);
             if (sessionCtx) {
                 std::lock_guard<std::mutex> l(sessionCtx->lock);
                 p.pack("sid"); p.pack(sessionCtx->sessionId);

@@ -140,9 +140,6 @@ public:
         return cache.isSynced();
     }
 
-    bool isExpired(const time_point& now) const {
-        return listeners.empty() and (lastRemoved + EXPIRATION < now);
-    }
     time_point getExpiration() const;
 
     size_t size() const {
@@ -157,7 +154,7 @@ private:
 
     OpValueCache cache;
     std::map<size_t, LocalListener> listeners;
-    time_point lastRemoved {clock::now()};
+    time_point lastRemoved {time_point::max()};
 };
 
 class SearchCache {

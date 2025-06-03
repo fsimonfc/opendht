@@ -1816,7 +1816,7 @@ fromDhtConfig(const Config& config)
     return netConf;
 }
 
-Dht::Dht(std::unique_ptr<net::DatagramSocket>&& sock, const Config& config, const Sp<Logger>& l, std::unique_ptr<std::mt19937_64>&& rda)
+Dht::Dht(std::unique_ptr<net::DatagramSocket>&& sock, const Config& config, AbstractTime *time, const Sp<Logger>& l, std::unique_ptr<std::mt19937_64>&& rda)
     : DhtInterface(l),
     rd(rda ? std::move(*rda) : crypto::getSeededRandomEngine<std::mt19937_64>()),
     myid(config.node_id ? config.node_id : InfoHash::getRandom(rd)),
@@ -1825,7 +1825,9 @@ Dht::Dht(std::unique_ptr<net::DatagramSocket>&& sock, const Config& config, cons
     max_store_keys(config.max_store_keys ? (int)config.max_store_keys : MAX_HASHES),
     max_store_size(config.max_store_size ? (int)config.max_store_size : DEFAULT_STORAGE_LIMIT),
     max_searches(config.max_searches ? (int)config.max_searches : MAX_SEARCHES),
-    network_engine(myid, fromDhtConfig(config), std::move(sock), logger_, rd, scheduler,
+    time_(time),
+    scheduler(time_),
+    network_engine(myid, fromDhtConfig(config), std::move(sock), logger_, rd, time_, scheduler,
             std::bind(&Dht::onError, this, _1, _2),
             std::bind(&Dht::onNewNode, this, _1, _2),
             std::bind(&Dht::onReportedAddr, this, _1, _2),

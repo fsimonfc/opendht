@@ -3,6 +3,8 @@
 
 #include "test_dhtproxy_stress.h"
 
+#include "opendht/real_time.h"
+
 #include <iostream>
 #include <string>
 #include <chrono>
@@ -37,7 +39,10 @@ DhtProxyStressTester::setUp()
 
     dht::ProxyServerConfig serverConfig;
     serverConfig.port = 8084;
-    serverProxy = std::make_unique<dht::DhtProxyServer>(nodeProxy, serverConfig, logger);
+    serverProxy = std::make_unique<dht::DhtProxyServer>(nodeProxy,
+                                                        std::make_shared<dht::RealTime>(),
+                                                        serverConfig,
+                                                        logger);
     clientConfig.proxy_server = "http://127.0.0.1:8084";
 }
 

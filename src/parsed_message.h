@@ -129,7 +129,7 @@ struct ParsedMessage
     std::string ua;
     int version {0};
     SockAddr addr;
-    void msgpack_unpack(const msgpack::object& o);
+    void msgpack_unpack(const msgpack::object& o, TimeInterface* time);
 
     bool append(const ParsedMessage& block);
     bool complete();
@@ -186,7 +186,7 @@ ParsedMessage::complete()
 }
 
 void
-ParsedMessage::msgpack_unpack(const msgpack::object& msg)
+ParsedMessage::msgpack_unpack(const msgpack::object& msg, TimeInterface* time)
 {
     if (msg.type != msgpack::type::MAP)
         throw msgpack::type_error();
@@ -316,7 +316,7 @@ ParsedMessage::msgpack_unpack(const msgpack::object& msg)
         else if (key == KEY_REQ_ADDRESS)
             parsedReq.sa = &o.val;
         else if (key == KEY_REQ_CREATION)
-            created = from_time_t(o.val.as<std::time_t>());
+            created = time->from_time_t(o.val.as<std::time_t>());
         else if (key == KEY_REQ_VALUES)
             parsedReq.values = &o.val;
         else if (key == KEY_REQ_EXPIRED)

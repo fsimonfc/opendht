@@ -969,7 +969,7 @@ Dht::listenTo(const InfoHash& id, sa_family_t af, ValueCallback cb, Value::Filte
         throw DhtException("Unable to create search");
     if (logger_)
         logger_->warn("[search {} IPv{}] Listen", id.to_view(), (af == AF_INET) ? '4' : '6');
-    return sr->listen(cb, std::move(f), q, scheduler);
+    return sr->listen(time_->steadyNow(), cb, std::move(f), q, scheduler);
 }
 
 size_t
@@ -1989,6 +1989,7 @@ fromDhtConfig(const Config& config)
 
 Dht::Dht(std::unique_ptr<net::DatagramSocket>&& sock,
          const Config& config,
+         std::shared_ptr<TimeInterface> time,
          const Sp<Logger>& l,
          std::unique_ptr<std::mt19937_64>&& rda)
     : DhtInterface(l)
@@ -2001,11 +2002,14 @@ Dht::Dht(std::unique_ptr<net::DatagramSocket>&& sock,
     , max_store_size(config.max_store_size ? (size_t) config.max_store_size : STORAGE_LIMIT_DEFAULT)
     , max_local_store_size(config.max_local_store_size ? (size_t) config.max_local_store_size : STORAGE_LIMIT_UNLIMITED)
     , max_searches(config.max_searches ? (int) config.max_searches : MAX_SEARCHES)
+    , time_(std::move(time))
+    , scheduler(time_)
     , network_engine(myid,
                      fromDhtConfig(config),
                      std::move(sock),
                      logger_,
                      rd,
+                     time_,
                      scheduler,
                      std::bind(&Dht::onError, this, _1, _2),
                      std::bind(&Dht::onNewNode, this, _1, _2),

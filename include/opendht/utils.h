@@ -85,9 +85,6 @@ using system_clock = std::chrono::system_clock;
 using time_point = clock::time_point;
 using duration = clock::duration;
 
-OPENDHT_PUBLIC time_point from_time_t(std::time_t t);
-OPENDHT_PUBLIC std::time_t to_time_t(time_point t);
-
 template<class DT>
 static std::string
 print_duration(DT d)

@@ -85,6 +85,8 @@ DhtRunner::run(const Config& config, Context&& context)
         return;
     }
 
+    time_ = context.time ? context.time : std::make_shared<RealTime>();
+
     try {
         auto local4 = config.bind4;
         auto local6 = config.bind6;
@@ -163,6 +165,7 @@ DhtRunner::run(const Config& config, Context&& context)
             }
             auto dht = std::make_unique<Dht>(std::move(context.sock),
                                              SecureDht::getConfig(config.dht_config),
+                                             time_,
                                              context.logger,
                                              std::move(context.rng));
             dht_ = std::make_unique<SecureDht>(std::move(dht),
@@ -715,7 +718,7 @@ DhtRunner::loop_()
     // Discard old packets
     size_t dropped {0};
     if (not received.empty()) {
-        auto limit = clock::now() - net::RX_QUEUE_MAX_DELAY;
+        auto limit = time_->steadyNow() - net::RX_QUEUE_MAX_DELAY;
         auto it = received.begin();
         while (it != received.end() and it->received < limit) {
             it->data.clear();
@@ -728,7 +731,7 @@ DhtRunner::loop_()
     // Handle packets
     if (not received.empty()) {
         for (auto& pkt : received) {
-            auto now = clock::now();
+            auto now = time_->steadyNow();
             if (now - pkt.received > net::RX_QUEUE_MAX_DELAY)
                 dropped++;
             else
@@ -738,7 +741,7 @@ DhtRunner::loop_()
         received_treated.splice(received_treated.end(), std::move(received));
     } else {
         // Or just run the scheduler
-        wakeup = dht_->periodic(nullptr, 0, nullptr, 0, clock::now());
+        wakeup = dht_->periodic(nullptr, 0, nullptr, 0, time_->steadyNow());
     }
 
     if (not received_treated.empty()) {
@@ -1199,6 +1202,7 @@ DhtRunner::enableProxy(bool proxify)
                     cv.notify_all();
                 }
             },
+            time_,
             config_.proxy_server,
             config_.proxy_user_agent,
             config_.push_node_id,

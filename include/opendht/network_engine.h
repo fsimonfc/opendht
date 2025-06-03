@@ -199,6 +199,7 @@ public:
                   std::unique_ptr<DatagramSocket>&& sock,
                   const Sp<Logger>& log,
                   std::mt19937_64& rd,
+                  std::shared_ptr<TimeInterface> time,
                   Scheduler& scheduler,
                   decltype(NetworkEngine::onError)&& onError,
                   decltype(NetworkEngine::onNewNode)&& onNewNode,
@@ -578,6 +579,7 @@ private:
     MessageStats in_stats {}, out_stats {};
     std::set<SockAddr> blacklist {};
 
+    std::shared_ptr<TimeInterface> time_;
     Scheduler& scheduler;
 
     bool logIncoming_ {false};

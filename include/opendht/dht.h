@@ -50,6 +50,7 @@ public:
      */
     Dht(std::unique_ptr<net::DatagramSocket>&& sock,
         const Config& config,
+        std::shared_ptr<TimeInterface> time,
         const Sp<Logger>& l = {},
         std::unique_ptr<std::mt19937_64>&& rd = {});
 
@@ -431,6 +432,7 @@ private:
     size_t listener_token {1};
 
     // timing
+    std::shared_ptr<TimeInterface> time_;
     Scheduler scheduler;
     Sp<Scheduler::Job> nextNodesConfirmation {};
     Sp<Scheduler::Job> nextStorageMaintenance {};

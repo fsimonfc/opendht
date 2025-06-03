@@ -94,7 +94,7 @@ private:
 class OpCache
 {
 public:
-    OpCache()
+    OpCache(time_point now)
         : cache([this](const std::vector<Sp<Value>>& vals, bool expired) {
             if (expired)
                 onValuesExpired(vals);
@@ -102,6 +102,7 @@ public:
                 onValuesAdded(vals);
             return true;
         })
+        , lastRemoved(now)
     {}
 
     bool onValue(const std::vector<Sp<Value>>& vals, bool expired) { return cache.onValue(vals, expired); }
@@ -150,7 +151,7 @@ private:
 
     OpValueCache cache;
     std::map<size_t, LocalListener> listeners;
-    time_point lastRemoved {clock::now()};
+    time_point lastRemoved;
 };
 
 class SearchCache
@@ -160,7 +161,11 @@ public:
     SearchCache(SearchCache&&) = default;
 
     using OnListen = std::function<size_t(Sp<Query>, ValueCallback, SyncCallback)>;
-    size_t listen(const ValueCallback& get_cb, const Sp<Query>& q, Value::Filter&& filter, const OnListen& onListen);
+    size_t listen(time_point now,
+                  const ValueCallback& get_cb,
+                  const Sp<Query>& q,
+                  Value::Filter&& filter,
+                  const OnListen& onListen);
 
     bool cancelListen(size_t gtoken, const time_point& now);
     void cancelAll(const std::function<void(size_t)>& onCancel);

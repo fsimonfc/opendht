@@ -38,6 +38,7 @@ NetworkEngineTester::testDisabledOnMsvc()
 #include "opendht/node.h"
 #include "opendht/network_engine.h"
 #include "opendht/network_utils.h"
+#include "opendht/real_time.h"
 #include "opendht/utils.h"
 #include "opendht/value.h"
 
@@ -209,6 +210,7 @@ makeIPv4(const char* ip, in_port_t port)
 
 static net::NetworkEngine
 makeEngine(std::unique_ptr<TestDatagramSocket>&& socket,
+           std::shared_ptr<TimeInterface> time,
            Scheduler& scheduler,
            InfoHash& myid,
            std::mt19937_64& rd,
@@ -220,6 +222,7 @@ makeEngine(std::unique_ptr<TestDatagramSocket>&& socket,
         std::move(socket),
         {},
         rd,
+        std::move(time),
         scheduler,
         [](Sp<net::Request>, net::DhtProtocolException) {},
         [&onNewNodeCalls](const Sp<Node>&, int) { ++onNewNodeCalls; },
@@ -245,11 +248,12 @@ NetworkEngineTester::tearDown()
 void
 NetworkEngineTester::testIgnoresUnknownPartialData()
 {
-    Scheduler scheduler;
+    auto time = std::make_shared<RealTime>();
+    Scheduler scheduler(time);
     std::mt19937_64 rd(0);
     InfoHash myid = InfoHash::getRandom(rd);
     int onNewNodeCalls = 0;
-    auto engine = makeEngine(std::make_unique<TestDatagramSocket>(), scheduler, myid, rd, onNewNodeCalls);
+    auto engine = makeEngine(std::make_unique<TestDatagramSocket>(), time, scheduler, myid, rd, onNewNodeCalls);
 
     Blob fragment = {1, 2, 3};
     auto packet = makeValueDataPacketBlob(99, 0, 0, fragment);
@@ -264,12 +268,13 @@ NetworkEngineTester::testIgnoresUnknownPartialData()
 void
 NetworkEngineTester::testCompletesPartialSessionFromSameSource()
 {
-    Scheduler scheduler;
+    auto time = std::make_shared<RealTime>();
+    Scheduler scheduler(time);
     std::mt19937_64 rd(1);
     InfoHash myid = InfoHash::getRandom(rd);
     InfoHash remoteId = InfoHash::getRandom(rd);
     int onNewNodeCalls = 0;
-    auto engine = makeEngine(std::make_unique<TestDatagramSocket>(), scheduler, myid, rd, onNewNodeCalls);
+    auto engine = makeEngine(std::make_unique<TestDatagramSocket>(), time, scheduler, myid, rd, onNewNodeCalls);
 
     std::string data(TEST_MTU * 2 + 64, 'z');
     auto serialized = serializeValue(data);
@@ -293,12 +298,13 @@ NetworkEngineTester::testCompletesPartialSessionFromSameSource()
 void
 NetworkEngineTester::testKeepsSessionForWrongSourceFragment()
 {
-    Scheduler scheduler;
+    auto time = std::make_shared<RealTime>();
+    Scheduler scheduler(time);
     std::mt19937_64 rd(2);
     InfoHash myid = InfoHash::getRandom(rd);
     InfoHash remoteId = InfoHash::getRandom(rd);
     int onNewNodeCalls = 0;
-    auto engine = makeEngine(std::make_unique<TestDatagramSocket>(), scheduler, myid, rd, onNewNodeCalls);
+    auto engine = makeEngine(std::make_unique<TestDatagramSocket>(), time, scheduler, myid, rd, onNewNodeCalls);
 
     std::string data(TEST_MTU + 32, 'w');
     auto serialized = serializeValue(data);
@@ -331,7 +337,8 @@ NetworkEngineTester::testKeepsSessionForWrongSourceFragment()
 void
 NetworkEngineTester::testListenConfirmationCarriesToken()
 {
-    Scheduler scheduler;
+    auto time = std::make_shared<RealTime>();
+    Scheduler scheduler(time);
     std::mt19937_64 rd(3);
     InfoHash myid = InfoHash::getRandom(rd);
     InfoHash remoteId = InfoHash::getRandom(rd);
@@ -351,6 +358,7 @@ NetworkEngineTester::testListenConfirmationCarriesToken()
         std::move(socket),
         {},
         rd,
+        time,
         scheduler,
         [](Sp<net::Request>, net::DhtProtocolException) {},
         [&onNewNodeCalls](const Sp<Node>&, int) { ++onNewNodeCalls; },
@@ -380,7 +388,7 @@ NetworkEngineTester::testListenConfirmationCarriesToken()
 
     auto replyObject = msgpack::unpack((const char*) sent.data.data(), sent.data.size());
     ParsedMessage reply;
-    reply.msgpack_unpack(replyObject.get());
+    reply.msgpack_unpack(replyObject.get(), time.get());
 
     CPPUNIT_ASSERT(reply.type == MessageType::Reply);
     CPPUNIT_ASSERT_EQUAL(myid, reply.id);
@@ -395,7 +403,8 @@ NetworkEngineTester::testListenConfirmationUpdatesSearchNodeToken()
     config.max_peer_req_per_sec = -1;
 
     auto rd = std::make_unique<std::mt19937_64>(6);
-    Dht localDht(std::make_unique<TestDatagramSocket>(), config, {}, std::move(rd));
+    auto time = std::make_shared<RealTime>();
+    Dht localDht(std::make_unique<TestDatagramSocket>(), config, time, {}, std::move(rd));
 
     auto node = std::make_shared<Node>(InfoHash::getRandom(localDht.rd),
                                        makeIPv4("127.0.0.2", 5006),
@@ -442,7 +451,8 @@ NetworkEngineTester::testListenReopensSocketAfterNodeExpiration()
     config.max_peer_req_per_sec = -1;
 
     auto rd = std::make_unique<std::mt19937_64>(4);
-    Dht localDht(std::make_unique<TestDatagramSocket>(), config, {}, std::move(rd));
+    auto time = std::make_shared<RealTime>();
+    Dht localDht(std::make_unique<TestDatagramSocket>(), config, time, {}, std::move(rd));
 
     auto node = std::make_shared<Node>(InfoHash::getRandom(localDht.rd),
                                        makeIPv4("127.0.0.2", 5004),
@@ -493,8 +503,9 @@ NetworkEngineTester::testUnauthorizedListenFlushClearsListenState()
     config.max_req_per_sec = -1;
     config.max_peer_req_per_sec = -1;
 
+    auto time = std::make_shared<RealTime>();
     auto rd = std::make_unique<std::mt19937_64>(5);
-    Dht localDht(std::make_unique<TestDatagramSocket>(), config, {}, std::move(rd));
+    Dht localDht(std::make_unique<TestDatagramSocket>(), config, time, {}, std::move(rd));
 
     auto node = std::make_shared<Node>(InfoHash::getRandom(localDht.rd),
                                        makeIPv4("127.0.0.2", 5005),

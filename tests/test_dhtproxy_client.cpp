@@ -16,6 +16,7 @@
 #define private public
 #include "opendht/http.h"
 #include "opendht/dht_proxy_client.h"
+#include "opendht/real_time.h"
 #undef private
 #if defined(__clang__)
 #pragma clang diagnostic pop
@@ -35,7 +36,8 @@ void
 DhtProxyClientTester::testResubscribeUsesKeyRoute()
 {
 #ifdef OPENDHT_PUSH_NOTIFICATIONS
-    DhtProxyClient client({}, {}, [] {}, "http://127.0.0.1:8080", "OpenDHT-Test", "client-id", "push-token");
+    DhtProxyClient client(
+        {}, {}, [] {}, std::make_shared<RealTime>(), "http://127.0.0.1:8080", "OpenDHT-Test", "client-id", "push-token");
 
     DhtProxyClient::Listener listener {OpValueCache([](const std::vector<Sp<Value>>&, bool) { return true; })};
     listener.opstate = std::make_shared<DhtProxyClient::OperationState>();
@@ -59,7 +61,8 @@ void
 DhtProxyClientTester::testSetPushNotificationTokenResubscribesWithNewToken()
 {
 #ifdef OPENDHT_PUSH_NOTIFICATIONS
-    DhtProxyClient client({}, {}, [] {}, "http://127.0.0.1:8080", "OpenDHT-Test", "client-id", "old-token");
+    DhtProxyClient client(
+        {}, {}, [] {}, std::make_shared<RealTime>(), "http://127.0.0.1:8080", "OpenDHT-Test", "client-id", "old-token");
 
     client.statusIpv4_ = NodeStatus::Connected;
 

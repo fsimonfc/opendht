@@ -74,6 +74,7 @@ NetworkEngine::NetworkEngine(InfoHash& myid,
                              std::unique_ptr<DatagramSocket>&& sock,
                              const Sp<Logger>& log,
                              std::mt19937_64& rand,
+                             std::shared_ptr<TimeInterface> time,
                              Scheduler& scheduler,
                              decltype(NetworkEngine::onError)&& onError,
                              decltype(NetworkEngine::onNewNode)&& onNewNode,
@@ -100,8 +101,12 @@ NetworkEngine::NetworkEngine(InfoHash& myid,
     , rd(rand)
     , cache(rd)
     , rate_limiter(config.max_req_per_sec)
+    , time_(std::move(time))
     , scheduler(scheduler)
-{}
+{
+    if (!time_)
+        throw std::invalid_argument("NetworkEngine requires a valid TimeInterface instance");
+}
 
 NetworkEngine::~NetworkEngine()
 {
@@ -447,7 +452,7 @@ NetworkEngine::processMessage(const uint8_t* buf, size_t buflen, SockAddr f)
     auto msg = std::make_unique<ParsedMessage>();
     try {
         msgpack::unpacked msg_res = msgpack::unpack((const char*) buf, buflen);
-        msg->msgpack_unpack(msg_res.get());
+        msg->msgpack_unpack(msg_res.get(), time_.get());
     } catch (const std::exception& e) {
         if (logger_)
             logger_->warn("Unable to parse message of size {}: {}", buflen, e.what());
@@ -1340,7 +1345,7 @@ NetworkEngine::sendAnnounceValue(const Sp<Node>& n,
     auto v = packValueHeader(buffer, {value});
     if (add_created) {
         pk.pack(KEY_REQ_CREATION);
-        pk.pack(to_time_t(created));
+        pk.pack(time_->to_time_t(created));
     }
     pk.pack(KEY_REQ_TOKEN);
     pk.pack(token);
@@ -1441,7 +1446,7 @@ NetworkEngine::sendUpdateValues(const Sp<Node>& n,
     auto v = packValueHeader(buffer, begin, end);
     if (created < scheduler.time()) {
         pk.pack(KEY_REQ_CREATION);
-        pk.pack(to_time_t(created));
+        pk.pack(time_->to_time_t(created));
     }
     pk.pack(KEY_REQ_TOKEN);
     pk.pack(token);

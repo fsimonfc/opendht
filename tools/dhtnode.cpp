@@ -5,6 +5,8 @@
 #endif
 
 #include "tools_common.h"
+#include <opendht/real_time.h>
+
 extern "C" {
 #include <gnutls/gnutls.h>
 }
@@ -233,7 +235,8 @@ cmd_loop(std::shared_ptr<DhtRunner>& node,
                 ProxyServerConfig serverConfig;
                 serverConfig.port = port;
                 serverConfig.pushServer = pushServer;
-                proxies.emplace(port, std::make_unique<DhtProxyServer>(node, serverConfig));
+                proxies.emplace(port,
+                                std::make_unique<DhtProxyServer>(node, std::make_shared<RealTime>(), serverConfig));
             } catch (...) {
             }
             continue;
@@ -250,7 +253,8 @@ cmd_loop(std::shared_ptr<DhtRunner>& node,
                     serverConfig.identity = params.proxy_id;
                     serverConfig.port = port;
                     serverConfig.pushServer = pushServer;
-                    proxies.emplace(port, std::make_unique<DhtProxyServer>(node, serverConfig));
+                    proxies.emplace(port,
+                                    std::make_unique<DhtProxyServer>(node, std::make_shared<RealTime>(), serverConfig));
                 } else {
                     std::cerr << "Missing Identity private key or certificate" << std::endl;
                 }
@@ -607,7 +611,10 @@ main(int argc, char** argv)
                 if (not params.persist_path.empty())
                     serverConfig.persistStatePath = params.persist_path + '_' + std::to_string(serverConfig.port);
                 proxies.emplace(params.proxyserverssl,
-                                std::make_unique<DhtProxyServer>(node, serverConfig, dhtConf.second.logger));
+                                std::make_unique<DhtProxyServer>(node,
+                                                                 std::make_shared<RealTime>(),
+                                                                 serverConfig,
+                                                                 dhtConf.second.logger));
             }
             if (params.proxyserver) {
                 serverConfig.identity = {};
@@ -615,7 +622,10 @@ main(int argc, char** argv)
                 if (not params.persist_path.empty())
                     serverConfig.persistStatePath = params.persist_path + '_' + std::to_string(serverConfig.port);
                 proxies.emplace(params.proxyserver,
-                                std::make_unique<DhtProxyServer>(node, serverConfig, dhtConf.second.logger));
+                                std::make_unique<DhtProxyServer>(node,
+                                                                 std::make_shared<RealTime>(),
+                                                                 serverConfig,
+                                                                 dhtConf.second.logger));
             }
 #else
             std::cerr << "DHT proxy server requested but OpenDHT built without proxy server support." << std::endl;

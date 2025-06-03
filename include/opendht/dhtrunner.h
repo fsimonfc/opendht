@@ -10,6 +10,7 @@
 #include "logger.h"
 #include "network_utils.h"
 #include "node_export.h"
+#include "real_time.h"
 
 #include <thread>
 #include <mutex>
@@ -59,6 +60,7 @@ public:
     {
         std::shared_ptr<Logger> logger {};
         std::unique_ptr<net::DatagramSocket> sock;
+        std::shared_ptr<TimeInterface> time {};
         std::shared_ptr<PeerDiscovery> peerDiscovery {};
         StatusCallback statusChangedCallback {};
         CertificateStoreQueryLegacy certificateStore {};
@@ -566,6 +568,7 @@ private:
 
     /** DHT instance */
     std::unique_ptr<SecureDht> dht_;
+    std::shared_ptr<TimeInterface> time_;
 
     /** true if we are currently using a proxy */
     std::atomic_bool use_proxy {false};

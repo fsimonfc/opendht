@@ -3,6 +3,8 @@
 
 #include "test_dhtproxy.h"
 
+#include "opendht/real_time.h"
+
 // std
 #include <iostream>
 #include <string>
@@ -39,7 +41,7 @@ DhtProxyTester::setUp()
     // serverConfig.identity = dht::crypto::generateIdentity("DHT Node", serverCAIdentity);
     serverConfig.port = port;
     // serverConfig.pushServer = "127.0.0.1:8090";
-    serverProxy = std::make_unique<dht::DhtProxyServer>(nodeProxy, serverConfig);
+    serverProxy = std::make_unique<dht::DhtProxyServer>(nodeProxy, std::make_unique<dht::RealTime>(), serverConfig);
 
     /*clientConfig.server_ca = serverCAIdentity.second;
     clientConfig.client_identity = dht::crypto::generateIdentity("DhtProxyTester");

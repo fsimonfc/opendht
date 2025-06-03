@@ -10,6 +10,7 @@
 #include "dht_interface.h"
 #include "proxy.h"
 #include "http.h"
+#include "time_interface.h"
 
 #include <restinio/all.hpp>
 #include <json/json.h>
@@ -37,6 +38,7 @@ public:
     explicit DhtProxyClient(std::shared_ptr<crypto::Certificate> serverCA,
                             crypto::Identity clientIdentity,
                             std::function<void()> loopSignal,
+                            std::shared_ptr<TimeInterface> time,
                             const std::string& serverHost,
                             const std::string& userAgent = "",
                             const std::string& pushClientId = "",
@@ -466,6 +468,8 @@ private:
 #endif
 
     const std::function<void()> loopSignal_;
+
+    std::shared_ptr<TimeInterface> time_;
 
 #ifdef OPENDHT_PUSH_NOTIFICATIONS
     std::string fillBody(bool resubscribe);

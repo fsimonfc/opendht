@@ -5,6 +5,7 @@
 
 #include "opendht/value.h"
 #include "opendht/node.h"
+#include "opendht/real_time.h"
 #include "opendht/utils.h"
 
 #include "../src/parsed_message.h"
@@ -20,6 +21,7 @@ using namespace dht;
 using namespace dht::net;
 
 static constexpr size_t TEST_MTU {1280};
+static RealTime time;
 
 // Helper: create a ParsedMessage with a single value_parts entry of given total_size
 static ParsedMessage
@@ -52,7 +54,7 @@ parsePackedMessage(msgpack::sbuffer& buffer)
 {
     auto msg = msgpack::unpack(buffer.data(), buffer.size());
     ParsedMessage parsed;
-    parsed.msgpack_unpack(msg.get());
+    parsed.msgpack_unpack(msg.get(), &time);
     return parsed;
 }
 
@@ -284,7 +286,7 @@ ParsedMessageTester::testParseRejectsNonMapPacket()
 
     auto msg = msgpack::unpack(buffer.data(), buffer.size());
     ParsedMessage parsed;
-    CPPUNIT_ASSERT_THROW(parsed.msgpack_unpack(msg.get()), msgpack::type_error);
+    CPPUNIT_ASSERT_THROW(parsed.msgpack_unpack(msg.get(), &time), msgpack::type_error);
 }
 
 void
@@ -304,7 +306,7 @@ ParsedMessageTester::testParseRejectsInvalidValueDataPayload()
 
     auto msg = msgpack::unpack(buffer.data(), buffer.size());
     ParsedMessage parsed;
-    CPPUNIT_ASSERT_THROW(parsed.msgpack_unpack(msg.get()), msgpack::type_error);
+    CPPUNIT_ASSERT_THROW(parsed.msgpack_unpack(msg.get(), &time), msgpack::type_error);
 }
 
 void
@@ -325,7 +327,7 @@ ParsedMessageTester::testParseRejectsInvalidValuesField()
 
     auto msg = msgpack::unpack(buffer.data(), buffer.size());
     ParsedMessage parsed;
-    CPPUNIT_ASSERT_THROW(parsed.msgpack_unpack(msg.get()), msgpack::type_error);
+    CPPUNIT_ASSERT_THROW(parsed.msgpack_unpack(msg.get(), &time), msgpack::type_error);
 }
 
 void
@@ -348,7 +350,7 @@ ParsedMessageTester::testParseIgnoresIncompleteValueDataEntry()
 
     auto msg = msgpack::unpack(buffer.data(), buffer.size());
     ParsedMessage parsed;
-    parsed.msgpack_unpack(msg.get());
+    parsed.msgpack_unpack(msg.get(), &time);
 
     CPPUNIT_ASSERT(parsed.fragment_parts.empty());
 }

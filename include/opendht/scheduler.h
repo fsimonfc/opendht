@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "time_interface.h"
 #include "utils.h"
 
 #include <functional>
@@ -18,6 +19,14 @@ namespace dht {
 class Scheduler
 {
 public:
+    Scheduler(std::shared_ptr<TimeInterface> time)
+        : time_(std::move(time))
+    {
+        if (!time_)
+            throw std::invalid_argument("Scheduler requires a valid TimeInterface instance");
+        now = time_->steadyNow();
+    }
+
     struct Job
     {
         Job(std::function<void()>&& f, time_point t)
@@ -110,11 +119,12 @@ public:
      * operations.
      */
     inline const time_point& time() const { return now; }
-    inline time_point syncTime() { return (now = clock::now()); }
+    inline time_point syncTime() { return (now = time_->steadyNow()); }
     inline void syncTime(const time_point& n) { now = n; }
 
 private:
-    time_point now {clock::now()};
+    std::shared_ptr<TimeInterface> time_;
+    time_point now;
     std::multimap<time_point, Sp<Job>> timers {}; /* the jobs ordered by time */
 };
 

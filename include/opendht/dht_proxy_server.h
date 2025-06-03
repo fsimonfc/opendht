@@ -10,6 +10,7 @@
 #include "sockaddr.h"
 #include "value.h"
 #include "http.h"
+#include "real_time.h"
 
 #include <restinio/all.hpp>
 #include <restinio/tls.hpp>
@@ -64,6 +65,7 @@ public:
      * it will fails silently
      */
     DhtProxyServer(const std::shared_ptr<DhtRunner>& dht,
+                   std::shared_ptr<TimeInterface> time,
                    const ProxyServerConfig& config = {},
                    const std::shared_ptr<log::Logger>& logger = {});
 
@@ -137,7 +139,7 @@ public:
         /**
          * Build a json object from a NodeStats
          */
-        Json::Value toJson() const;
+        Json::Value toJson(TimeInterface* time) const;
     };
 
     std::shared_ptr<ServerStats> stats() const { return stats_; }
@@ -365,6 +367,7 @@ private:
 
     std::shared_ptr<asio::io_context> ioContext_;
     std::shared_ptr<DhtRunner> dht_;
+    std::shared_ptr<TimeInterface> time_;
     Json::StreamWriterBuilder jsonBuilder_;
     Json::CharReaderBuilder jsonReaderBuilder_;
     std::mt19937_64 rd {crypto::getSeededRandomEngine<std::mt19937_64>()};
@@ -401,7 +404,7 @@ private:
     std::shared_ptr<ConnectionListener> connListener_;
     struct PermanentPut
     {
-        time_point expiration;
+        std::time_t expiration;
         std::string pushToken;
         std::string clientId;
         std::shared_ptr<PushSessionContext> sessionCtx;
@@ -419,7 +422,7 @@ private:
             p.pack("value");
             p.pack(value);
             p.pack("exp");
-            p.pack(to_time_t(expiration));
+            p.pack(expiration);
             if (not clientId.empty()) {
                 p.pack("cid");
                 p.pack(clientId);
@@ -460,7 +463,7 @@ private:
 #ifdef OPENDHT_PUSH_NOTIFICATIONS
     struct Listener
     {
-        time_point expiration;
+        std::time_t expiration;
         std::string clientId;
         std::shared_ptr<PushSessionContext> sessionCtx;
         std::future<size_t> internalToken;
@@ -476,7 +479,7 @@ private:
             p.pack("cid");
             p.pack(clientId);
             p.pack("exp");
-            p.pack(to_time_t(expiration));
+            p.pack(expiration);
             if (sessionCtx) {
                 std::lock_guard l(sessionCtx->lock);
                 p.pack("sid");

@@ -65,7 +65,7 @@ public:
      * Initialise the Dht with two open sockets (for IPv4 and IP6)
      * and an ID for the node.
      */
-    Dht(std::unique_ptr<net::DatagramSocket>&& sock, const Config& config, const Sp<Logger>& l = {}, std::unique_ptr<std::mt19937_64>&& rd = {});
+    Dht(std::unique_ptr<net::DatagramSocket>&& sock, const Config& config, AbstractTime *time, const Sp<Logger>& l = {}, std::unique_ptr<std::mt19937_64>&& rd = {});
 
     virtual ~Dht();
 
@@ -423,6 +423,7 @@ private:
 
 
     // timing
+    AbstractTime *time_;
     Scheduler scheduler;
     Sp<Scheduler::Job> nextNodesConfirmation {};
     Sp<Scheduler::Job> nextStorageMaintenance {};

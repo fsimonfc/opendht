@@ -221,6 +221,7 @@ public:
             std::unique_ptr<DatagramSocket>&& sock,
             const Sp<Logger>& log,
             std::mt19937_64& rd,
+            AbstractTime *time,
             Scheduler& scheduler,
             decltype(NetworkEngine::onError)&& onError,
             decltype(NetworkEngine::onNewNode)&& onNewNode,
@@ -594,6 +595,7 @@ private:
     MessageStats in_stats {}, out_stats {};
     std::set<SockAddr> blacklist {};
 
+    AbstractTime *time_;
     Scheduler& scheduler;
 
     bool logIncoming_ {false};

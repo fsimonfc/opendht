@@ -21,6 +21,7 @@
 
 #include <opendht/value.h>
 #include <opendht/dhtrunner.h>
+#include <opendht/real_time.h>
 
 #include <iostream>
 #include <string>
@@ -45,7 +46,7 @@ HttpTester::setUp() {
     dht::ProxyServerConfig config;
     config.port = 8080;
     config.pushServer = "127.0.0.1:8090";
-    serverProxy = std::make_unique<dht::DhtProxyServer>(nodeProxy, config);
+    serverProxy = std::make_unique<dht::DhtProxyServer>(nodeProxy, std::make_unique<dht::Time>(), config);
 
     // Wait for the server to start
     std::this_thread::sleep_for(std::chrono::milliseconds(100));

@@ -28,6 +28,7 @@
 #include "logger.h"
 #include "network_utils.h"
 #include "node_export.h"
+#include "real_time.h"
 
 #include <thread>
 #include <mutex>
@@ -499,6 +500,7 @@ private:
 
     /** DHT instance */
     std::unique_ptr<SecureDht> dht_;
+    Time time_;
 
     /** true if we are currently using a proxy */
     std::atomic_bool use_proxy {false};

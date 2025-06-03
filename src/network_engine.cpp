@@ -89,6 +89,7 @@ NetworkEngine::NetworkEngine(InfoHash& myid, NetworkConfig c,
         std::unique_ptr<DatagramSocket>&& sock,
         const Sp<Logger>& log,
         std::mt19937_64& rand,
+        AbstractTime *time,
         Scheduler& scheduler,
         decltype(NetworkEngine::onError)&& onError,
         decltype(NetworkEngine::onNewNode)&& onNewNode,
@@ -111,6 +112,7 @@ NetworkEngine::NetworkEngine(InfoHash& myid, NetworkConfig c,
     myid(myid), config(c), dht_socket(std::move(sock)), logger_(log), rd(rand),
     cache(rd),
     rate_limiter(config.max_req_per_sec),
+    time_(time),
     scheduler(scheduler)
 {}
 
@@ -426,7 +428,7 @@ NetworkEngine::processMessage(const uint8_t *buf, size_t buflen, SockAddr f)
     auto msg = std::make_unique<ParsedMessage>();
     try {
         msgpack::unpacked msg_res = msgpack::unpack((const char*)buf, buflen);
-        msg->msgpack_unpack(msg_res.get());
+        msg->msgpack_unpack(time_, msg_res.get());
     } catch (const std::exception& e) {
         if (logger_)
             logger_->w("Can't parse message of size %lu: %s", buflen, e.what());
@@ -1211,7 +1213,7 @@ NetworkEngine::sendAnnounceValue(const Sp<Node>& n,
       auto v = packValueHeader(buffer, {value});
       if (add_created) {
           pk.pack(KEY_REQ_CREATION);
-          pk.pack(to_time_t(created));
+          pk.pack(time_->to_time_t(created));
       }
       pk.pack(KEY_REQ_TOKEN);  pk.pack(token);
 
@@ -1301,7 +1303,7 @@ NetworkEngine::sendUpdateValues(const Sp<Node>& n,
       auto v = packValueHeader(buffer, begin, end);
       if (created < scheduler.time()) {
           pk.pack(KEY_REQ_CREATION);
-          pk.pack(to_time_t(created));
+          pk.pack(time_->to_time_t(created));
       }
       pk.pack(KEY_REQ_TOKEN);  pk.pack(token);
 

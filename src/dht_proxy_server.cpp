@@ -222,17 +222,26 @@ DhtProxyServer::DhtProxyServer(const std::shared_ptr<DhtRunner>& dht,
         const std::shared_ptr<dht::Logger>& logger
 )
     :   ioContext_(std::make_shared<asio::io_context>()),
-        dht_(dht), time_(std::move(time)), persistPath_(config.persistStatePath), logger_(logger),
+        dht_(dht), time_(std::move(time)),
+        persistPath_(config.persistStatePath), logger_(logger),
         printStatsTimer_(std::make_unique<asio::steady_timer>(*ioContext_, 3s)),
         serverStartTime_(time_->steadyNow()),
         connListener_(std::make_shared<ConnectionListener>(std::bind(&DhtProxyServer::onConnectionClosed, this, std::placeholders::_1))),
         pushServer_(config.pushServer),
-        bundleId_(config.bundleId)
+        bundleId_(config.bundleId),
+        record_(config.record)
 {
     if (not dht_)
         throw std::invalid_argument("A DHT instance must be provided");
     if (not time_)
         throw std::invalid_argument("An AbstractTime instance must be provided");
+
+    if (record_) {
+        recordedData_.rngSeed = system_clock::now().time_since_epoch().count();
+        rd.seed(recordedData_.rngSeed);
+    } else {
+        rd = crypto::getSeededRandomEngine<std::mt19937_64>();
+    }
 
     if (logger_)
         logger_->d("[proxy:server] [init] running on %i", config.port);
@@ -502,6 +511,15 @@ DhtProxyServer::~DhtProxyServer()
         serverThread_.join();
     if (logger_)
         logger_->d("[proxy:server] http server closed");
+    
+    if (record_) {
+        // Save recorded data
+        std::filesystem::path dataPath("recorded_proxy_data");
+        recordedData_.save(dataPath);
+    } else {
+        fmt::print(stderr, "@@@ Not recording proxy data\n");
+    }
+
 }
 
 template< typename ServerSettings >

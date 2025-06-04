@@ -29,6 +29,7 @@
 #include "value.h"
 #include "http.h"
 #include "real_time.h"
+#include "recording.h"
 
 #include <restinio/all.hpp>
 #include <restinio/tls.hpp>
@@ -70,6 +71,7 @@ struct OPENDHT_PUBLIC ProxyServerConfig {
     std::string persistStatePath {};
     dht::crypto::Identity identity {};
     std::string bundleId {};
+    bool record {false};
 };
 
 /**
@@ -412,7 +414,7 @@ private:
     std::unique_ptr<AbstractTime> time_;
     Json::StreamWriterBuilder jsonBuilder_;
     Json::CharReaderBuilder jsonReaderBuilder_;
-    std::mt19937_64 rd {crypto::getSeededRandomEngine<std::mt19937_64>()};
+    std::mt19937_64 rd;
 
     std::string persistPath_;
 
@@ -527,6 +529,9 @@ private:
     };
     std::map<std::string, PushListener> pushListeners_;
 #endif //OPENDHT_PUSH_NOTIFICATIONS
+
+    bool record_;
+    RecordedProxyData recordedData_;
 };
 
 }

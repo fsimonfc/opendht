@@ -18,6 +18,7 @@
 #pragma once
 
 #include "utils.h"
+#include "recording.h"
 
 #include <chrono>
 
@@ -27,7 +28,9 @@ class Time : public AbstractTime {
 public:
     time_point steadyNow()
     {
-        return clock::now();
+        auto now = clock::now();
+        recorded_.now.push_back(now.time_since_epoch().count());
+        return now;
     }
 
     time_point from_time_t(std::time_t t)
@@ -38,19 +41,30 @@ public:
             return time_point::max();
         else if (dt < system_clock::duration(0) and now < time_point::min() - dt)
             return time_point::min();
-        return now + dt;
+        
+        auto ret = now + dt;
+        recorded_.from_time_t.push_back(ret.time_since_epoch().count());
+        return ret;
     }
 
     std::time_t to_time_t(time_point t)
     {
         auto dt = t - clock::now();
         auto now = system_clock::now();
+
+        std::time_t ret;
         if (dt > duration(0) and now >= system_clock::time_point::max() - dt)
-            return system_clock::to_time_t(system_clock::time_point::max());
+            ret = system_clock::to_time_t(system_clock::time_point::max());
         else if (dt < duration(0) and now <= system_clock::time_point::min() - dt)
-            return system_clock::to_time_t(system_clock::time_point::min());
-        return system_clock::to_time_t(now + std::chrono::duration_cast<system_clock::duration>(dt));
+            ret = system_clock::to_time_t(system_clock::time_point::min());
+        else
+            ret = system_clock::to_time_t(now + std::chrono::duration_cast<system_clock::duration>(dt));
+        
+        recorded_.to_time_t.push_back(ret);
+        return ret;
     }
+
+    RecordedTime recorded_;
 };
 
 }

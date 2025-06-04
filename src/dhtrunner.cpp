@@ -91,6 +91,12 @@ DhtRunner::run(const char* ip4, const char* ip6, const char* service, Config& co
 void
 DhtRunner::run(const Config& config, Context&& context)
 {
+    if (config.record) {
+        recordedData_ = std::make_unique<RecordedData>(64 * 1024 * 1024);
+        uint64_t seed = system_clock::now().time_since_epoch().count();
+        recordedData_->rngSeed = seed;
+        context.rng = std::make_unique<std::mt19937_64>(seed);
+    }
     std::lock_guard<std::mutex> lck(dht_mtx);
     auto expected = State::Idle;
     if (not running.compare_exchange_strong(expected, State::Running)) {
@@ -384,6 +390,16 @@ DhtRunner::join()
         status4 = NodeStatus::Disconnected;
         status6 = NodeStatus::Disconnected;
     }
+
+    if (recordedData_) {
+        // Save recorded data
+        std::filesystem::path timePath("recorded_time");
+        std::filesystem::path dataPath("recorded_data");
+        time_.recorded_.save(timePath);
+        recordedData_->save(dataPath);
+    } else {
+        fmt::print(stderr, "@@@ Not recording DhtRunner data\n");
+    }
 }
 
 SockAddr
@@ -658,6 +674,13 @@ DhtRunner::loop_()
         std::lock_guard<std::mutex> lck(sock_mtx);
         // move to stack
         received = std::move(rcv);
+    }
+
+    if (recordedData_) {
+        // Record received packets
+        for (auto& pkt : received) {
+            recordedData_->addPacket(pkt);
+        }
     }
 
     // Discard old packets

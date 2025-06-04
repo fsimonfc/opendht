@@ -158,6 +158,7 @@ struct dht_params {
     std::string save_identity {};
     bool no_rate_limit {false};
     bool public_stable {false};
+    bool record {false};
 };
 
 std::pair<dht::DhtRunner::Config, dht::DhtRunner::Context>
@@ -191,6 +192,7 @@ getDhtConfig(dht_params& params)
         config.dht_config.node_config.max_searches = -1;
         config.dht_config.node_config.max_store_size = -1;
     }
+    config.record = params.record;
 
     dht::DhtRunner::Context context {};
     if (params.log) {
@@ -252,6 +254,7 @@ static const constexpr struct option long_options[] = {
     {"devicekey",               required_argument, nullptr, 'z'},
     {"bundleid",                required_argument, nullptr, 'u'},
     {"version",                 no_argument      , nullptr, 'V'},
+    {"record",                  no_argument      , nullptr, 'r'},
     {nullptr,                   0                , nullptr,  0}
 };
 
@@ -261,7 +264,7 @@ parseArgs(int argc, char **argv) {
     int opt;
     std::string privkey;
     std::string proxy_privkey;
-    while ((opt = getopt_long(argc, argv, "hidsvODUPp:n:b:f:l:", long_options, nullptr)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hidsvODUPp:n:b:f:l:r", long_options, nullptr)) != -1) {
         switch (opt) {
         case 'p': {
                 int port_arg = atoi(optarg);
@@ -375,6 +378,9 @@ parseArgs(int argc, char **argv) {
             break;
         case 'I':
             params.save_identity = optarg;
+            break;
+        case 'r':
+            params.record = true;
             break;
         default:
             break;

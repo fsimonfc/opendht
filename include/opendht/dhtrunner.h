@@ -29,6 +29,7 @@
 #include "network_utils.h"
 #include "node_export.h"
 #include "real_time.h"
+#include "recording.h"
 
 #include <thread>
 #include <mutex>
@@ -71,6 +72,7 @@ public:
         std::shared_ptr<dht::crypto::Certificate> server_ca;
         dht::crypto::Identity client_identity;
         SockAddr bind4 {}, bind6 {};
+        bool record {false};
     };
 
     struct Context {
@@ -534,6 +536,8 @@ private:
      * would create instances of classes using a common logger.
      */
     std::shared_ptr<dht::Logger> logger_;
+
+    std::unique_ptr<RecordedData> recordedData_;
 };
 
 }

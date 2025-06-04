@@ -551,6 +551,7 @@ main(int argc, char **argv)
         if (params.proxyserver or params.proxyserverssl) {
 #ifdef OPENDHT_PROXY_SERVER
             ProxyServerConfig serverConfig;
+            serverConfig.record = params.record; 
             serverConfig.pushServer = params.pushserver;
             serverConfig.bundleId = params.bundle_id;
             serverConfig.address = params.proxy_address;

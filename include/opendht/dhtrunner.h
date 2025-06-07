@@ -29,6 +29,7 @@
 #include "network_utils.h"
 #include "node_export.h"
 #include "real_time.h"
+#include "securedht_interface.h"
 
 #include <thread>
 #include <mutex>
@@ -499,7 +500,7 @@ private:
     DoneCallbackSimple bindOpDoneCallback(DoneCallbackSimple&& cb);
 
     /** DHT instance */
-    std::unique_ptr<SecureDht> dht_;
+    std::unique_ptr<SecureDhtInterface> dht_;
     Time time_;
 
     /** true if we are currently using a proxy */
@@ -521,8 +522,8 @@ private:
     net::PacketList rcv {};
     decltype(rcv) rcv_free {};
 
-    std::queue<std::function<void(SecureDht&)>> pending_ops_prio {};
-    std::queue<std::function<void(SecureDht&)>> pending_ops {};
+    std::queue<std::function<void(SecureDhtInterface*)>> pending_ops_prio {};
+    std::queue<std::function<void(SecureDhtInterface*)>> pending_ops {};
     std::mutex storage_mtx {};
 
     std::atomic<State> running {State::Idle};

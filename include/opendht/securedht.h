@@ -22,6 +22,7 @@
 
 #include "dht.h"
 #include "crypto.h"
+#include "securedht_interface.h"
 
 #include <map>
 #include <vector>
@@ -30,7 +31,7 @@
 
 namespace dht {
 
-class OPENDHT_PUBLIC SecureDht final : public DhtInterface {
+class OPENDHT_PUBLIC SecureDht final : public SecureDhtInterface {
 public:
 
     typedef std::function<void(bool)> SignatureCheckCallback;
@@ -55,13 +56,13 @@ public:
 
     virtual ~SecureDht();
 
-    InfoHash getId() const {
+    InfoHash getId() const override {
         return key_ ? key_->getPublicKey().getId() : InfoHash();
     }
-    PkId getLongId() const {
+    PkId getLongId() const override {
         return key_ ? key_->getPublicKey().getLongId() : PkId();
     }
-    Sp<crypto::PublicKey> getPublicKey() const {
+    Sp<crypto::PublicKey> getPublicKey() const override {
         return key_ ? key_->getSharedPublicKey() : Sp<crypto::PublicKey>{};
     }
 
@@ -104,8 +105,8 @@ public:
     /**
      * Will take ownership of the value, sign it using our private key and put it in the DHT.
      */
-    void putSigned(const InfoHash& hash, Sp<Value> val, DoneCallback callback, bool permanent = false);
-    void putSigned(const InfoHash& hash, Value&& v, DoneCallback callback, bool permanent = false) {
+    void putSigned(const InfoHash& hash, Sp<Value> val, DoneCallback callback, bool permanent = false) override;
+    void putSigned(const InfoHash& hash, Value&& v, DoneCallback callback, bool permanent = false) override {
         putSigned(hash, std::make_shared<Value>(std::move(v)), callback, permanent);
     }
 
@@ -114,20 +115,20 @@ public:
      * and put it in the DHT.
      * The operation will be immediate if the recipient' public key is known (otherwise it will be retrived first).
      */
-    void putEncrypted(const InfoHash& hash, const InfoHash& to, Sp<Value> val, DoneCallback callback, bool permanent = false);
+    void putEncrypted(const InfoHash& hash, const InfoHash& to, Sp<Value> val, DoneCallback callback, bool permanent = false) override;
 
     [[deprecated("Use the shared_ptr version instead")]]
-    void putEncrypted(const InfoHash& hash, const InfoHash& to, Value&& v, DoneCallback callback, bool permanent = false) {
+    void putEncrypted(const InfoHash& hash, const InfoHash& to, Value&& v, DoneCallback callback, bool permanent = false) override {
         putEncrypted(hash, to, std::make_shared<Value>(std::move(v)), callback, permanent);
     }
-    void putEncrypted(const InfoHash& hash, const crypto::PublicKey& to, Sp<Value> val, DoneCallback callback, bool permanent = false);
+    void putEncrypted(const InfoHash& hash, const crypto::PublicKey& to, Sp<Value> val, DoneCallback callback, bool permanent = false) override;
 
     [[deprecated("Use the shared_ptr version instead")]]
-    void putEncrypted(const InfoHash& hash, const crypto::PublicKey& to, Value&& v, DoneCallback callback, bool permanent = false) {
+    void putEncrypted(const InfoHash& hash, const crypto::PublicKey& to, Value&& v, DoneCallback callback, bool permanent = false) override {
         putEncrypted(hash, to, std::make_shared<Value>(std::move(v)), callback, permanent);
     }
 
-    void putEncrypted(const InfoHash& hash, const PkId& to, Sp<Value> val, DoneCallback callback, bool permanent = false);
+    void putEncrypted(const InfoHash& hash, const PkId& to, Sp<Value> val, DoneCallback callback, bool permanent = false) override;
 
     /**
      * Take ownership of the value and sign it using our private key.
@@ -138,16 +139,16 @@ public:
 
     Value decrypt(const Value& v);
 
-    void findCertificate(const InfoHash& node, const std::function<void(const Sp<crypto::Certificate>)>& cb);
-    void findPublicKey(const InfoHash& node, const std::function<void(const Sp<crypto::PublicKey>)>& cb);
+    void findCertificate(const InfoHash& node, const std::function<void(const Sp<crypto::Certificate>)>& cb) override;
+    void findPublicKey(const InfoHash& node, const std::function<void(const Sp<crypto::PublicKey>)>& cb) override;
 
-    void findCertificate(const PkId& id, const std::function<void(const Sp<crypto::Certificate>)>& cb);
-    void findPublicKey(const PkId& id, const std::function<void(const Sp<crypto::PublicKey>)>& cb);
+    void findCertificate(const PkId& id, const std::function<void(const Sp<crypto::Certificate>)>& cb) override;
+    void findPublicKey(const PkId& id, const std::function<void(const Sp<crypto::PublicKey>)>& cb) override;
 
-    void registerCertificate(const Sp<crypto::Certificate>& cert);
+    void registerCertificate(const Sp<crypto::Certificate>& cert) override;
 
-    Sp<crypto::Certificate> getCertificate(const InfoHash& node) const;
-    Sp<crypto::PublicKey> getPublicKey(const InfoHash& node) const;
+    Sp<crypto::Certificate> getCertificate(const InfoHash& node) const override;
+    Sp<crypto::PublicKey> getPublicKey(const InfoHash& node) const override;
 
     Sp<crypto::Certificate> getCertificate(const PkId& node) const;
     Sp<crypto::PublicKey> getPublicKey(const PkId& node) const;
@@ -157,7 +158,7 @@ public:
      * The search key used is the public key ID, so there may be multiple certificates retured, signed with
      * the same private key.
      */
-    void setLocalCertificateStore(CertificateStoreQuery&& query_method) {
+    void setLocalCertificateStore(CertificateStoreQuery&& query_method) override {
         localQueryMethod_ = std::move(query_method);
     }
     void setOnPublicAddressChanged(PublicAddressChangedCb cb) override {
@@ -327,7 +328,7 @@ public:
         dht_->connectivityChanged();
     }
 
-    void forwardAllMessages(bool forward) {
+    void forwardAllMessages(bool forward) override {
         forward_all_ = forward;
     }
 

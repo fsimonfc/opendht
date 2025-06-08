@@ -72,6 +72,7 @@ public:
         std::shared_ptr<dht::crypto::Certificate> server_ca;
         dht::crypto::Identity client_identity;
         SockAddr bind4 {}, bind6 {};
+        bool record {false};
     };
 
     struct Context {

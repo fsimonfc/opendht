@@ -25,6 +25,7 @@
 #include "dhtrunner.h"
 #include "securedht.h"
 #include "network_utils.h"
+#include "recording.h"
 #ifdef OPENDHT_PEER_DISCOVERY
 #include "peer_discovery.h"
 #endif
@@ -170,7 +171,11 @@ DhtRunner::run(const Config& config, Context&& context)
                 outConfig << context.sock->getBoundRef(AF_INET6).getPort() << std::endl;
             }
             auto dht = std::make_unique<Dht>(std::move(context.sock), SecureDht::getConfig(config.dht_config), &time_, context.logger, std::move(context.rng));
-            dht_ = std::make_unique<SecureDht>(std::move(dht), config.dht_config, std::move(context.identityAnnouncedCb), context.logger);
+            if (config.record) {
+                dht_ = std::make_unique<RecordedSecureDht>(std::move(dht), config.dht_config, std::move(context.identityAnnouncedCb), context.logger);
+            } else {
+                dht_ = std::make_unique<SecureDht>(std::move(dht), config.dht_config, std::move(context.identityAnnouncedCb), context.logger);
+            }
         } else {
             enableProxy(true);
         }

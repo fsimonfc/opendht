@@ -347,6 +347,7 @@ list (APPEND opendht_SOURCES
     src/log.cpp
     src/network_utils.cpp
     src/thread_pool.cpp
+    src/recording.cpp
 )
 
 list (APPEND opendht_HEADERS

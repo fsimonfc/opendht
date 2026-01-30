@@ -78,7 +78,7 @@ void
 printLog(std::ostream& s, source_loc loc, std::string_view prefix, fmt::string_view format, fmt::format_args args)
 {
     auto num = duration_cast<log_precision>(steady_clock::now().time_since_epoch()).count();
-    fmt::print(s, "[{:06d}.{:06d}] {}", num / den, num % den, prefix);
+    fmt::print(s, "[{:06d}.{:06d}] [{:>16}:{:<5}] {}", num / den, num % den, loc.file, loc.line, prefix);
     fmt::vprint(s, format, args);
     s << std::endl;
 }
@@ -142,11 +142,14 @@ getSyslogLogger(const char* name)
     return std::make_shared<Logger>(
         [logfile](source_loc loc, LogLevel level, std::string_view prefix, std::string&& message) {
             syslog(syslogLevel(level),
-                   "%.*s%.*s",
+                   "%.*s:%u %.*s%.*s",
+                   (int) loc.file.size(),
+                   loc.file.data(),
+                   loc.line,
                    (int) prefix.size(),
                    prefix.data(),
                    (int) message.size(),
-                   message.c_str());
+                   message.data());
         });
 #else
     return getStdLogger();

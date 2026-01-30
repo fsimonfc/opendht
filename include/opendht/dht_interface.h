@@ -18,9 +18,6 @@ class OPENDHT_PUBLIC DhtInterface
 {
 public:
     DhtInterface() = default;
-    DhtInterface(const Logger& l)
-        : logger_(std::make_shared<Logger>(l))
-    {}
     DhtInterface(const std::shared_ptr<Logger>& l)
         : logger_(l)
     {}

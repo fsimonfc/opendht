@@ -414,7 +414,6 @@ public:
     std::vector<ValuesExport> exportValues() const;
 
     void setLogger(const Sp<Logger>& logger = {});
-    void setLogger(const Logger& logger) { setLogger(std::make_shared<Logger>(logger)); }
 
     /**
      * Only print logs related to the given InfoHash (if given), or disable filter (if zeroes).

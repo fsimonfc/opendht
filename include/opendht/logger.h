@@ -8,6 +8,7 @@
 #include <fmt/printf.h>
 
 #include <functional>
+#include <mutex>
 #include <string_view>
 #include <type_traits>
 #include <cstdarg>

@@ -172,13 +172,17 @@ packMsg(const Type& t)
 
 template<typename Type>
 Type
-unpackMsg(Blob b)
+unpackMsg(const Blob& b)
 {
     msgpack::unpacked msg_res = msgpack::unpack((const char*) b.data(), b.size());
     return msg_res.get().as<Type>();
 }
 
-msgpack::unpacked unpackMsg(Blob b);
+inline msgpack::unpacked
+unpackMsg(const Blob& b)
+{
+    return msgpack::unpack((const char*) b.data(), b.size());
+}
 
 msgpack::object* findMapValue(const msgpack::object& map, const char* key, size_t length);
 

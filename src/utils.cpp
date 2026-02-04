@@ -282,12 +282,6 @@ unpackBlob(const msgpack::object& o)
     }
 }
 
-msgpack::unpacked
-unpackMsg(Blob b)
-{
-    return msgpack::unpack((const char*) b.data(), b.size());
-}
-
 msgpack::object*
 findMapValue(const msgpack::object& map, const char* key, size_t key_length)
 {

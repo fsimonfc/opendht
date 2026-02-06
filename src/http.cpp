@@ -499,9 +499,9 @@ Connection::set_ssl_verification(const std::string& hostname, const asio::ssl::v
             ssl_socket_->asio_ssl_stream().set_verify_callback(
                 [id = id_, logger = logger_, hostname, checkOcsp = checkOcsp_](bool preverified,
                                                                                asio::ssl::verify_context& ctx) -> bool {
-                    X509* cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
                     if (logger) {
                         char subject_name[1024];
+                        X509* cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
                         X509_NAME_oneline(X509_get_subject_name(cert), subject_name, 1024);
                         logger->debug("[connection:{:d}] verify {:s} compliance to RFC 2818:\n{:s}",
                                       id,
@@ -513,8 +513,13 @@ Connection::set_ssl_verification(const std::string& hostname, const asio::ssl::v
                     auto verifier = asio::ssl::host_name_verification(hostname);
                     bool verified = verifier(preverified, ctx);
                     auto verify_ec = X509_STORE_CTX_get_error(ctx.native_handle());
-                    if (verify_ec != 0 /*X509_V_OK*/ and logger)
-                        logger->error("[http::connection:{:d}] ssl verification error={:d} {}", id, verify_ec, verified);
+                    if (verify_ec != 0 /*X509_V_OK*/ and logger) {
+                        logger->error("[http::connection:{:d}] ssl verification error {:d}: {}. verified: {}",
+                                      id,
+                                      verify_ec,
+                                      X509_verify_cert_error_string(verify_ec),
+                                      verified);
+                    }
                     if (verified and checkOcsp) {
                         std::unique_ptr<stack_st_X509, void (*)(stack_st_X509*)> chain(X509_STORE_CTX_get1_chain(
                                                                                            ctx.native_handle()),

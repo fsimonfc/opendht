@@ -909,11 +909,11 @@ DhtProxyClient::listen(const InfoHash& key, ValueCallback cb, Value::Filter filt
             if (deviceKey_.empty()) { // listen
                 method = ListenMethod::LISTEN;
                 header.method(restinio::http_method_get());
-                header.request_target("/key/" + key.toString() + "/listen");
+                header.request_target(fmt::format("/key/{}/listen", key.to_view()));
             } else {
                 method = ListenMethod::SUBSCRIBE;
                 header.method(restinio::http_method_subscribe());
-                header.request_target("/key/" + key.toString());
+                header.request_target(fmt::format("/key/{}", key.to_view()));
             }
             sendListen(header, l->second.cb, opstate, l->second, method);
             return token;

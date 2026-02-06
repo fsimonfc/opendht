@@ -121,6 +121,7 @@ jobs:
       matrix:
         build_type: [Debug, Release]
         arch: [x64]
+        cxx_standard: [17, 20, 23]
 
     steps:
       - name: Checkout repository
@@ -152,6 +153,8 @@ jobs:
             -DVCPKG_INSTALLED_DIR=${{ env.VCPKG_INSTALLED_DIR }} `
             -DVCPKG_MANIFEST_FEATURES=test `
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+            -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} `
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON `
             -DBUILD_TESTING=ON `
             -DOPENDHT_PROXY_CLIENT=ON `
             -DOPENDHT_PROXY_SERVER=ON `
@@ -180,7 +183,7 @@ jobs:
         if: matrix.build_type == 'Release'
         uses: actions/upload-artifact@v6
         with:
-          name: opendht-windows-${{ matrix.arch }}-${{ matrix.build_type }}
+          name: opendht-windows-${{ matrix.arch }}-cxx${{ matrix.cxx_standard }}-${{ matrix.build_type }}
           path: |
             build/**/*.exe
             build/**/*.dll
@@ -195,6 +198,7 @@ jobs:
       matrix:
         build_type: [Release]
         arch: [x64]
+        cxx_standard: [17, 20, 23]
 
     steps:
       - name: Checkout repository
@@ -226,6 +230,8 @@ jobs:
             -DVCPKG_INSTALLED_DIR=${{ env.VCPKG_INSTALLED_DIR }} `
             -DVCPKG_MANIFEST_FEATURES=test `
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+            -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} `
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON `
             -DBUILD_SHARED_LIBS=OFF `
             -DBUILD_TESTING=ON `
             -DOPENDHT_PROXY_CLIENT=ON `
@@ -252,7 +258,7 @@ jobs:
       - name: Upload static build artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: opendht-windows-static-${{ matrix.arch }}-${{ matrix.build_type }}
+          name: opendht-windows-static-${{ matrix.arch }}-cxx${{ matrix.cxx_standard }}-${{ matrix.build_type }}
           path: |
             build/**/*.exe
             build/**/*.lib

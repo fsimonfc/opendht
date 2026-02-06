@@ -36,6 +36,9 @@ jobs:
   build-ubuntu-minimal:
     name: Ubuntu/GCC minimal build
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cxx_standard: [17, 20, 23]
     steps:
       - uses: actions/checkout@v6
 
@@ -50,6 +53,8 @@ jobs:
           mkdir build && cd build
           cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local \
                    -DCMAKE_BUILD_TYPE=Debug \
+                   -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
+                   -DCMAKE_CXX_STANDARD_REQUIRED=ON \
                    -DOPENDHT_C=Off -DBUILD_TESTING=On \
                    -DOPENDHT_PEER_DISCOVERY=Off -DOPENDHT_PYTHON=Off \
                    -DOPENDHT_TOOLS=On -DOPENDHT_PROXY_SERVER=Off -DOPENDHT_PROXY_CLIENT=Off
@@ -122,6 +127,9 @@ jobs:
   build-macos:
     name: macOS/Clang build
     runs-on: macos-15
+    strategy:
+      matrix:
+        cxx_standard: [17, 20, 23]
     steps:
       - uses: actions/checkout@v6
 
@@ -158,6 +166,8 @@ jobs:
           cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local \
                    -DOPENDHT_DOWNLOAD_DEPS=ON \
                    -DCMAKE_BUILD_TYPE=Debug \
+                   -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
+                   -DCMAKE_CXX_STANDARD_REQUIRED=ON \
                    -DOPENDHT_C=On -DBUILD_TESTING=On \
                    -DOPENDHT_PEER_DISCOVERY=On -DOPENDHT_PYTHON=Off \
                    -DOPENDHT_TOOLS=On -DOPENDHT_PROXY_SERVER=On \

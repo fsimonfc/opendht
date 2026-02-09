@@ -406,7 +406,7 @@ public:
 
     std::pair<size_t, size_t> getStoreSize() const;
 
-    void getStorageLimit() const;
+    size_t getStorageLimit() const;
     void setStorageLimit(size_t limit = DEFAULT_STORAGE_LIMIT);
 
     std::vector<NodeExport> exportNodes() const;

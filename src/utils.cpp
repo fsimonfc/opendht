@@ -71,7 +71,7 @@ SockAddr::resolve(const std::string& host, const std::string& service)
     addrinfo* info = nullptr;
     int rc = getaddrinfo(host.c_str(), service.empty() ? nullptr : service.c_str(), &hints, &info);
     if (rc != 0)
-        throw std::invalid_argument(std::string("Error: `") + host + ":" + service + "`: " + gai_strerror(rc));
+        throw std::invalid_argument(fmt::format("Error: `{}:{}`: {}", host, service, gai_strerror(rc)));
 
     for (addrinfo* infop = info; infop; infop = infop->ai_next)
         ips.emplace_back(infop->ai_addr, infop->ai_addrlen);

@@ -6,9 +6,10 @@
 #include "../sockaddr.h"
 #include "../utils.h"
 #include "latency_model.h"
-#include "metric_sink.h"
+#include "packet_recorder.h"
 
 #include <chrono>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <random>
@@ -27,35 +28,40 @@ class SimSocket;
 class SimNetwork : public std::enable_shared_from_this<SimNetwork>
 {
 public:
-    /**
-     * Hook invoked when a packet has been accepted for transmission. The
-     * simulator uses this to enqueue a `PacketArrival` event at `now + latency`.
-     * @param latency  in-flight delay decided by the LatencyModel
-     */
+    struct Counters
+    {
+        uint64_t packets_sent {0};
+        uint64_t packets_dropped {0};
+        uint64_t bytes_sent {0};
+        uint64_t bytes_dropped {0};
+    };
+
     using DeliverHook = std::function<
         void(size_t dst_node_id, size_t src_node_id, SockAddr src, Blob data, std::chrono::nanoseconds latency)>;
 
     SimNetwork(std::shared_ptr<LatencyModel> latency,
                std::mt19937_64& rng,
                DeliverHook deliver,
-               std::shared_ptr<MetricSink> metrics = {},
+               std::shared_ptr<PacketRecorder> recorder = {},
                std::function<std::chrono::steady_clock::time_point()> now = {});
 
     void registerSocket(SimSocket& s);
     void unregisterSocket(const SockAddr& addr);
 
-    /** Called by SimSocket::sendTo. */
     int send(const SockAddr& src, const SockAddr& dst, const uint8_t* data, size_t size);
 
     SimSocket* find(const SockAddr& addr);
+
+    const Counters& counters() const noexcept { return counters_; }
 
 private:
     std::shared_ptr<LatencyModel> latency_;
     std::mt19937_64& rng_;
     DeliverHook deliver_;
-    std::shared_ptr<MetricSink> metrics_;
+    std::shared_ptr<PacketRecorder> recorder_;
     std::function<std::chrono::steady_clock::time_point()> now_;
     std::unordered_map<std::string, SimSocket*> sockets_;
+    Counters counters_ {};
 };
 
 } // namespace sim

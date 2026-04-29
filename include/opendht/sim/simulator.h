@@ -7,7 +7,7 @@
 #include "../sockaddr.h"
 #include "identity_cache.h"
 #include "latency_model.h"
-#include "metric_sink.h"
+#include "packet_recorder.h"
 #include "sim_clock.h"
 
 #include <chrono>
@@ -73,8 +73,10 @@ struct SimConfig
     std::shared_ptr<LatencyModel> latency;
     /** Optional logger override. If unset, a SimLogger writing to stderr is used. */
     std::shared_ptr<Logger> logger_override;
-    /** Optional metric sink. Defaults to a `NullMetricSink` (counters only). */
-    std::shared_ptr<MetricSink> metrics;
+    /** Selects the per-packet recorder built by `Simulator`. */
+    PacketRecorderKind packet_recorder {PacketRecorderKind::None};
+    /** Output path for `PacketRecorderKind::Jsonl`. Ignored otherwise. */
+    std::string packet_recorder_file;
     /**
      * Optional identity cache. When non-null the simulator fetches
      * `cache->get(identity_seed, i)` for each node and installs it as the
@@ -106,6 +108,14 @@ public:
     using clock = std::chrono::steady_clock;
     using time_point = clock::time_point;
 
+    /** Per-event-kind counters maintained by `runOne()`. */
+    struct Counters
+    {
+        uint64_t timer_events {0};
+        uint64_t packet_events {0};
+        uint64_t workload_events {0};
+    };
+
     explicit Simulator(SimConfig cfg);
     ~Simulator();
 
@@ -132,9 +142,11 @@ public:
     // ---- internals ----------------------------------------------------------
     std::shared_ptr<SimClock> clockFor(size_t node_index) const;
     std::shared_ptr<SimNetwork> network() const;
-    /** Active metric sink (never null; defaults to NullMetricSink). */
-    MetricSink& metrics() const;
-    std::shared_ptr<MetricSink> metricsPtr() const;
+    /** Per-event-kind counters. Use `network()->counters()` for packet/byte
+     *  counters. */
+    const Counters& counters() const noexcept;
+    /** Active per-packet recorder (may be null when configured as `None`). */
+    std::shared_ptr<PacketRecorder> packetRecorder() const;
 
     /** Schedule a Timer that calls `runner->loop()` on node `i` at `at`. */
     void scheduleTick(size_t i, time_point at);

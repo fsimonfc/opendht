@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "opendht/sim/simulator.h"
 #include "opendht/sim/identity_cache.h"
-#include "opendht/sim/metric_sink.h"
+#include "opendht/sim/packet_recorder.h"
 #include "opendht/sim/sim_logger.h"
 #include "opendht/sim/sim_network.h"
 #include "opendht/sim/sim_socket.h"
@@ -78,6 +78,8 @@ struct Simulator::Impl
     std::shared_ptr<SimNetwork> network;
     std::vector<std::unique_ptr<SimNode>> nodes;
     std::vector<TraceRecord> trace;
+    std::shared_ptr<PacketRecorder> recorder;
+    Simulator::Counters counters {};
 
     explicit Impl(SimConfig c)
         : cfg(std::move(c))
@@ -121,8 +123,17 @@ struct Simulator::Impl
         if (e.time > steady_state->now)
             steady_state->now = e.time;
         trace.push_back(TraceRecord {e.time, e.kind, e.seq, e.a, e.b, e.c});
-        if (cfg.metrics && e.kind == EventKind::Timer)
-            cfg.metrics->onTimer(e.time, static_cast<size_t>(e.a), e.time);
+        switch (e.kind) {
+        case EventKind::Timer:
+            ++counters.timer_events;
+            break;
+        case EventKind::PacketArrival:
+            ++counters.packet_events;
+            break;
+        case EventKind::Workload:
+            ++counters.workload_events;
+            break;
+        }
         e.run();
     }
 };
@@ -130,8 +141,17 @@ struct Simulator::Impl
 void
 Simulator::Impl::buildNodes()
 {
-    if (!cfg.metrics)
-        cfg.metrics = std::make_shared<NullMetricSink>();
+    switch (cfg.packet_recorder) {
+    case PacketRecorderKind::None:
+        recorder.reset();
+        break;
+    case PacketRecorderKind::InMemory:
+        recorder = std::make_shared<InMemoryPacketRecorder>();
+        break;
+    case PacketRecorderKind::Jsonl:
+        recorder = JsonlPacketRecorder::openFile(cfg.packet_recorder_file);
+        break;
+    }
     auto state = steady_state;
     network = std::make_shared<SimNetwork>(
         cfg.latency,
@@ -155,7 +175,7 @@ Simulator::Impl::buildNodes()
                 static_cast<uint32_t>(src_id),
                 size);
         },
-        cfg.metrics,
+        recorder,
         [state]() { return state->now; });
 
     nodes.reserve(cfg.node_count);
@@ -187,22 +207,10 @@ Simulator::Impl::buildNodes()
         DhtRunner::Context rctx;
         rctx.time = n->clock;
         rctx.sock = std::make_unique<SimSocket>(i, n->addr, network, steady_state);
-        if (cfg.logger_override) {
-            // User-provided logger bypasses the metric `logs` channel; document
-            // it: callers wiring their own logger are expected to handle their
-            // own metric instrumentation.
+        if (cfg.logger_override)
             rctx.logger = cfg.logger_override;
-        } else if (!cfg.quiet) {
-            rctx.logger = makeSimLogger(steady_state, i, {}, cfg.metrics);
-        } else if (cfg.metrics) {
-            // Quiet mode but metrics requested: emit logs to the sink only.
-            auto sink = cfg.metrics;
-            auto state = steady_state;
-            rctx.logger = std::make_shared<Logger>(
-                [sink, state, i](log::source_loc, log::LogLevel level, std::string_view, std::string&& message) {
-                    sink->onLog(state->now, i, level, message);
-                });
-        }
+        else if (!cfg.quiet)
+            rctx.logger = makeSimLogger(steady_state, i);
         rctx.rng = std::make_unique<std::mt19937_64>(mix(cfg.seed, static_cast<uint64_t>(i)));
 
         n->runner->run(rcfg, std::move(rctx));
@@ -317,16 +325,16 @@ Simulator::network() const
     return p_->network;
 }
 
-MetricSink&
-Simulator::metrics() const
+const Simulator::Counters&
+Simulator::counters() const noexcept
 {
-    return *p_->cfg.metrics;
+    return p_->counters;
 }
 
-std::shared_ptr<MetricSink>
-Simulator::metricsPtr() const
+std::shared_ptr<PacketRecorder>
+Simulator::packetRecorder() const
 {
-    return p_->cfg.metrics;
+    return p_->recorder;
 }
 
 void

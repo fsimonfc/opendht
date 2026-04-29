@@ -148,7 +148,7 @@ if (NOT MSVC)
                 set(simdutf_lib ", ${simdutf_MODULE_NAME}")
             endif()
         endif()
-        #  libfmt 
+        #  libfmt
         pkg_search_module (fmt REQUIRED IMPORTED_TARGET fmt)
         # libreadline
         if (OPENDHT_TOOLS AND NOT APPLE)
@@ -246,7 +246,7 @@ if (NOT MSVC)
                     FetchContent_Declare(msgpack-c
                         GIT_REPOSITORY "https://github.com/msgpack/msgpack-c.git"
                         GIT_TAG        "cpp-7.0.0"
-                        FIND_PACKAGE_ARGS NAMES msgpack-c 
+                        FIND_PACKAGE_ARGS NAMES msgpack-c
                     )
                     set(MSGPACK_USE_BOOST OFF CACHE INTERNAL "Workaround for Boost")
                     FetchContent_MakeAvailable(msgpack-c)
@@ -315,28 +315,28 @@ if (NOT MSVC)
 else () # MSVC
     include_directories(src/compat/msvc)
     include_directories(src/compat/win32)
-    
+
     find_package(unofficial-argon2 CONFIG REQUIRED)
     include_directories(${ARGON2_INCLUDEDIR})
     set(argon2_lib ", libargon2")
 
     find_package(GnuTLS REQUIRED)
     include_directories(${GNUTLS_INCLUDE_DIR})
-    
+
     find_package(msgpack-cxx CONFIG REQUIRED)
     get_target_property(MSGPACK_INCLUDEDIR msgpack-cxx INTERFACE_INCLUDE_DIRECTORIES)
     include_directories(${MSGPACK_INCLUDEDIR})
-    
+
     find_package(jsoncpp CONFIG REQUIRED)
     set(JSONCPP_FOUND TRUE)
     include_directories(${JSONCPP_INCLUDE_DIRS})
 
     find_package(simdutf CONFIG REQUIRED)
     include_directories(${SIMDUTF_INCLUDE_DIRS})
-    
+
     find_package(fmt CONFIG REQUIRED)
     include_directories(${FMT_INCLUDEDIR})
-    
+
     if(OPENDHT_TOOLS)
         find_package(unofficial-readline-win32 CONFIG REQUIRED)
         include_directories(${READLINE_INCLUDEDIR})
@@ -364,13 +364,13 @@ else () # MSVC
     else()
         set(OPENDHT_PROXY_OPENSSL OFF)
     endif()
-    
+
     message(STATUS "Discovering external non-CMake libraries")
     find_library(NETTLE_LIBRARY NAMES nettle libnettle REQUIRED)
     find_library(HOGWEED_LIBRARY NAMES hogweed REQUIRED)
     find_library(TASN_LIBRARY NAMES tasn1 REQUIRED)
     find_path(NETTLE_INCLUDE_DIR nettle/aes.h REQUIRED)
-    
+
     add_library(nettle_lib STATIC IMPORTED)
     set_target_properties(nettle_lib PROPERTIES
         IMPORTED_LOCATION ${NETTLE_LIBRARY}
@@ -384,7 +384,7 @@ else () # MSVC
     set_target_properties(tasn1_lib PROPERTIES
         IMPORTED_LOCATION ${TASN_LIBRARY}
     )
-    
+
 endif ()
 
 # Definitions
@@ -575,7 +575,7 @@ if (MSVC)
     message(STATUS "Build pipeline: Windows/MSVC + vcpkg")
     message(STATUS "Used GnuTLS library: ${GNUTLS_LIBRARIES}")
     message(STATUS "Used NETTLE library: ${NETTLE_LIBRARY}")
-    target_link_libraries(opendht 
+    target_link_libraries(opendht
         PRIVATE
             unofficial::argon2::libargon2
             nettle_lib
@@ -583,8 +583,8 @@ if (MSVC)
             tasn1_lib
         PUBLIC
             ${GNUTLS_LIBRARIES}
-            msgpack-cxx 
-            JsonCpp::JsonCpp 
+            msgpack-cxx
+            JsonCpp::JsonCpp
             fmt::fmt
             simdutf::simdutf
             wsock32
@@ -608,7 +608,7 @@ else()
         target_link_libraries(opendht PRIVATE "-framework CoreFoundation" "-framework Security")
     endif ()
     # Generalized UNIX/MSYS2 build pipeline
-    if (OPENDHT_USE_PKGCONFIG) 
+    if (OPENDHT_USE_PKGCONFIG)
         target_link_libraries(opendht
             PRIVATE
                 PkgConfig::argon2
@@ -620,7 +620,7 @@ else()
                 PkgConfig::fmt
                 ${JSONCPP_LIBRARIES}
         )
-        if(OPENDHT_TOOLS) 
+        if(OPENDHT_TOOLS)
             message(STATUS ${READLINE_LIBRARIES})
             target_link_libraries(opendht PUBLIC ${READLINE_LIBRARIES})
         endif()
@@ -647,7 +647,7 @@ else()
         else()
             target_link_libraries(opendht PUBLIC fmt::fmt-header-only)
         endif()
-        if(OPENDHT_TOOLS) 
+        if(OPENDHT_TOOLS)
             target_link_libraries(opendht PUBLIC ${READLINE_LIBRARIES})
         endif()
         if (OPENDHT_PROXY_OPENSSL)
@@ -658,7 +658,7 @@ else()
         target_link_libraries(opendht PUBLIC ${MSGPACK_TARGET})
     endif()
     if(OPENDHT_HTTP)
-        target_link_libraries(opendht 
+        target_link_libraries(opendht
             PUBLIC # Required for linking tests
                 ${llhttp_target}
                 ${restinio_target}
@@ -684,7 +684,7 @@ endif()
 if (BUILD_SHARED_LIBS)
     set_target_properties (opendht PROPERTIES IMPORT_SUFFIX "_import.lib")
     set_target_properties (opendht PROPERTIES SOVERSION ${opendht_VERSION_MAJOR} VERSION ${opendht_VERSION})
-    target_compile_definitions(opendht PRIVATE OPENDHT_BUILD) 
+    target_compile_definitions(opendht PRIVATE OPENDHT_BUILD)
     target_compile_definitions(opendht PUBLIC opendht_EXPORTS)
 endif ()
 
@@ -728,7 +728,7 @@ if (WIN32)
             "winspool\\.drv"
             "mpr\\.dll"
             "version\\.dll"
-            "ws2_32\\.dll" 
+            "ws2_32\\.dll"
             "vcruntime.*\\.dll"
             "msvcp.*\\.dll"
             "wpax.*\\.dll"
@@ -768,6 +768,34 @@ endif ()
 if (OPENDHT_TOOLS)
     add_subdirectory(tools)
 endif ()
+
+option (OPENDHT_SIMULATION "Build deterministic simulation testing library" ${BUILD_TESTING})
+if (OPENDHT_SIMULATION)
+    add_library(opendht-sim STATIC
+        src/sim/sim_socket.cpp
+        src/sim/sim_network.cpp
+        src/sim/sim_logger.cpp
+        src/sim/simulator.cpp
+        src/sim/workloads.cpp
+        src/sim/identity_cache.cpp
+        src/sim/metrics.cpp
+        include/opendht/sim/sim_clock.h
+        include/opendht/sim/sim_socket.h
+        include/opendht/sim/sim_network.h
+        include/opendht/sim/sim_logger.h
+        include/opendht/sim/latency_model.h
+        include/opendht/sim/simulator.h
+        include/opendht/sim/workload.h
+        include/opendht/sim/workloads.h
+        include/opendht/sim/identity_cache.h
+        include/opendht/sim/metric_sink.h
+    )
+    target_link_libraries(opendht-sim PUBLIC opendht)
+    target_include_directories(opendht-sim PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    )
+    set_target_properties(opendht-sim PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif ()
 add_subdirectory(doc)
 
 if (OPENDHT_PYTHON)
@@ -785,7 +813,7 @@ if (OPENDHT_PYTHON)
             list(APPEND OPENDHT_PYTHON_LIBRARY_DIRS_LIST ${MSGPACK_LIBRARY_DIRS})
         endif()
     endif()
-    
+
     # Add the directory where the OpenDHT library is built
     if(WIN32)
         # Append actual configuration-specific build directories instead of an unevaluated $<CONFIG> generator expression
@@ -807,7 +835,7 @@ if (OPENDHT_PYTHON)
             endif()
         endif()
     endif()
-    
+
     if (OPENDHT_PYTHON_INCLUDE_DIRS_LIST)
         list(REMOVE_DUPLICATES OPENDHT_PYTHON_INCLUDE_DIRS_LIST)
         string(JOIN "\", \"" OPENDHT_PYTHON_INCLUDE_DIRS ${OPENDHT_PYTHON_INCLUDE_DIRS_LIST})
@@ -871,6 +899,16 @@ if (BUILD_TESTING)
         tests/test_networkengine.h
         tests/test_networkengine.cpp
     )
+    if (OPENDHT_SIMULATION)
+        list (APPEND test_FILES
+            tests/test_simulation.h
+            tests/test_simulation.cpp
+            tests/test_simulation_workloads.h
+            tests/test_simulation_workloads.cpp
+            tests/test_simulation_crypto.h
+            tests/test_simulation_crypto.cpp
+        )
+    endif()
     if (OPENDHT_PROXY_CLIENT)
         list (APPEND test_FILES
             tests/test_dhtproxy_client.h
@@ -908,6 +946,15 @@ if (BUILD_TESTING)
                 ${CMAKE_THREAD_LIBS_INIT}
                 ${cppunit_LIBRARIES}
             )
+            if (OPENDHT_SIMULATION AND test_name STREQUAL "test_simulation")
+                target_link_libraries(${target_name} PRIVATE opendht-sim)
+            endif()
+            if (OPENDHT_SIMULATION AND test_name STREQUAL "test_simulation_workloads")
+                target_link_libraries(${target_name} PRIVATE opendht-sim)
+            endif()
+            if (OPENDHT_SIMULATION AND test_name STREQUAL "test_simulation_crypto")
+                target_link_libraries(${target_name} PRIVATE opendht-sim)
+            endif()
             if (OPENDHT_PROXY_OPENSSL)
                 if (WIN32 AND MINGW) # MSYS2
                     target_link_libraries(${target_name} PRIVATE ${OPENSSL_LIBRARIES})

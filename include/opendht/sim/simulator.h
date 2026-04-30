@@ -6,7 +6,6 @@
 #include "../dhtrunner.h"
 #include "../sockaddr.h"
 #include "identity_cache.h"
-#include "latency_model.h"
 #include "packet_recorder.h"
 #include "sim_clock.h"
 
@@ -14,6 +13,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <queue>
 #include <random>
 #include <string>
 #include <vector>
@@ -69,8 +69,10 @@ struct SimConfig
     size_t node_count {1};
     /** Per-node maximum random `systemNow()` skew; 0 disables skew. */
     std::chrono::milliseconds system_clock_skew_max {0};
-    /** Latency model. Defaults to a fixed 20 ms link. */
-    std::shared_ptr<LatencyModel> latency;
+    /** Fixed one-way latency for all packets. */
+    std::chrono::milliseconds latency {20};
+    /** Probability that any given packet is dropped (0.0 = no loss, 1.0 = total loss). */
+    double drop_probability {0.0};
     /** Optional logger override. If unset, a SimLogger writing to stderr is used. */
     std::shared_ptr<Logger> logger_override;
     /** Selects the per-packet recorder built by `Simulator`. */
@@ -84,8 +86,8 @@ struct SimConfig
      * (faster; suitable for routing/perf tests).
      */
     std::shared_ptr<IdentityCache> identity_cache;
-    /** When true, suppress per-node SimLogger output (useful in unit tests). */
-    bool quiet {false};
+    /** When true, enable per-node SimLogger output. */
+    bool verbose {false};
 };
 
 /** A single simulated node: non-threaded DhtRunner + clock. The DatagramSocket
@@ -140,29 +142,54 @@ public:
     void scheduleAt(time_point at, std::function<void()> fn);
 
     // ---- internals ----------------------------------------------------------
-    std::shared_ptr<SimClock> clockFor(size_t node_index) const;
     std::shared_ptr<SimNetwork> network() const;
-    /** Per-event-kind counters. Use `network()->counters()` for packet/byte
-     *  counters. */
+    /** Per-event-kind counters. Use `network()->counters()` for packet/byte counters. */
     const Counters& counters() const noexcept;
     /** Active per-packet recorder (may be null when configured as `None`). */
     std::shared_ptr<PacketRecorder> packetRecorder() const;
-
     /** Schedule a Timer that calls `runner->loop()` on node `i` at `at`. */
     void scheduleTick(size_t i, time_point at);
-
     /** Deterministic event trace (one entry per popped event). */
     const std::vector<TraceRecord>& trace() const;
-    /** SHA-256 hex of the trace, useful for cross-machine spot-checks. */
+    /** FNV-1a hash of the event trace, useful for cross-machine spot-checks. */
     std::string traceHash() const;
 
 private:
-    struct Impl;
-    std::unique_ptr<Impl> p_;
-};
+    struct Event
+    {
+        time_point time;
+        EventKind kind;
+        uint64_t seq;
+        uint32_t a {0};
+        uint32_t b {0};
+        uint32_t c {0};
+        std::function<void()> run;
 
-/** Convenience helper: build a Simulator, run a workload, return verify() result. */
-bool runWorkload(SimConfig cfg, Workload& w, std::string& error_out);
+        bool operator<(const Event& other) const
+        {
+            if (time != other.time)
+                return time > other.time;
+            return seq > other.seq;
+        }
+    };
+
+    void enqueue(time_point at, EventKind k, std::function<void()> fn, uint32_t a = 0, uint32_t b = 0, uint32_t c = 0);
+    void scheduleNextWakeup(size_t i, time_point wakeup);
+    void tickNode(size_t i);
+    void buildNodes();
+    void runOne();
+
+    SimConfig cfg_;
+    std::shared_ptr<SimClock::SteadyState> steady_state_ {std::make_shared<SimClock::SteadyState>()};
+    std::mt19937_64 rng_;
+    std::priority_queue<Event> queue_;
+    uint64_t next_seq_ {0};
+    std::shared_ptr<SimNetwork> network_;
+    std::vector<std::unique_ptr<SimNode>> nodes_;
+    std::vector<TraceRecord> trace_;
+    std::shared_ptr<PacketRecorder> recorder_;
+    Counters counters_ {};
+};
 
 } // namespace sim
 } // namespace dht

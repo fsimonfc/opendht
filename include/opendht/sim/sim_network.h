@@ -5,7 +5,6 @@
 #include "../def.h"
 #include "../sockaddr.h"
 #include "../utils.h"
-#include "latency_model.h"
 #include "packet_recorder.h"
 
 #include <chrono>
@@ -39,7 +38,8 @@ public:
     using DeliverHook = std::function<
         void(size_t dst_node_id, size_t src_node_id, SockAddr src, Blob data, std::chrono::nanoseconds latency)>;
 
-    SimNetwork(std::shared_ptr<LatencyModel> latency,
+    SimNetwork(std::chrono::milliseconds latency,
+               double drop_probability,
                std::mt19937_64& rng,
                DeliverHook deliver,
                std::shared_ptr<PacketRecorder> recorder = {},
@@ -55,7 +55,8 @@ public:
     const Counters& counters() const noexcept { return counters_; }
 
 private:
-    std::shared_ptr<LatencyModel> latency_;
+    std::chrono::milliseconds latency_;
+    double drop_probability_;
     std::mt19937_64& rng_;
     DeliverHook deliver_;
     std::shared_ptr<PacketRecorder> recorder_;

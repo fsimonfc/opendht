@@ -5,7 +5,6 @@
 // See SIMULATION_DESIGN.md §7 for the planned option surface.
 
 #include <opendht/sim/identity_cache.h>
-#include <opendht/sim/latency_model.h>
 #include <opendht/sim/packet_recorder.h>
 #include <opendht/sim/sim_network.h>
 #include <opendht/sim/simulator.h>
@@ -35,12 +34,12 @@ printUsage(const char* prog)
                  "  --nodes N                   number of simulated nodes (default 4)\n"
                  "  --duration S                when no workload, free-run for S seconds (default 60)\n"
                  "  --workload NAME             one of: PutGet, ListenPut\n"
-                 "  --latency-min MS            min latency in ms (default 10)\n"
-                 "  --latency-max MS            max latency in ms (default = latency-min => fixed)\n"
+                 "  --latency MS                one-way latency in ms (default 20)\n"
+                 "  --drop P                    packet drop probability 0.0-1.0 (default 0)\n"
                  "  --system-clock-skew-max MS  per-node systemNow() skew bound (default 0)\n"
                  "  --packet-recorder-file PATH record packets as JSONL to PATH\n"
                  "  --counters                  print event/network counters at end\n"
-                 "  --quiet                     suppress per-node logging\n"
+                 "  --verbose                   enable per-node logging\n"
                  "  --trace-hash                print FNV-1a hash of the event trace\n"
                  "  --list-workloads            list available workloads and exit\n"
                  "  --help                      this message\n",
@@ -64,7 +63,6 @@ main(int argc, char** argv)
     SimConfig cfg;
     cfg.node_count = 4;
     std::chrono::seconds duration {60};
-    std::chrono::milliseconds lat_min {10}, lat_max {0};
     std::string_view workload_name;
     bool trace_hash = false;
     bool list_workloads = false;
@@ -106,12 +104,12 @@ main(int argc, char** argv)
         } else if (a == "--workload") {
             need(1);
             workload_name = argv[++i];
-        } else if (a == "--latency-min") {
+        } else if (a == "--latency") {
             need(1);
-            lat_min = std::chrono::milliseconds {parseUint(argv[++i])};
-        } else if (a == "--latency-max") {
+            cfg.latency = std::chrono::milliseconds {parseUint(argv[++i])};
+        } else if (a == "--drop") {
             need(1);
-            lat_max = std::chrono::milliseconds {parseUint(argv[++i])};
+            cfg.drop_probability = std::strtod(std::string {argv[++i]}.c_str(), nullptr);
         } else if (a == "--system-clock-skew-max") {
             need(1);
             cfg.system_clock_skew_max = std::chrono::milliseconds {parseUint(argv[++i])};
@@ -121,11 +119,10 @@ main(int argc, char** argv)
             cfg.packet_recorder = PacketRecorderKind::Jsonl;
         } else if (a == "--counters") {
             print_counters = true;
-        } else if (a == "--quiet") {
-            cfg.quiet = true;
+        } else if (a == "--verbose") {
+            cfg.verbose = true;
         } else if (a == "--trace-hash") {
             trace_hash = true;
-            cfg.quiet = true; // hashes are noise without -q
         } else if (a == "--list-workloads") {
             list_workloads = true;
         } else {
@@ -140,11 +137,6 @@ main(int argc, char** argv)
         std::cout << "ListenPut\n";
         return 0;
     }
-
-    if (lat_max.count() <= 0)
-        cfg.latency = std::make_shared<FixedLatency>(lat_min);
-    else
-        cfg.latency = std::make_shared<UniformLatency>(lat_min, lat_max);
 
     if (use_identities)
         cfg.identity_cache = std::make_shared<IdentityCache>(identity_cache_dir);
@@ -199,7 +191,7 @@ main(int argc, char** argv)
     }
 
     if (trace_hash)
-        std::cout << sim.traceHash() << "\n";
+        std::fprintf(stderr, "trace_hash=%s\n", sim.traceHash().c_str());
 
     return rc;
 }

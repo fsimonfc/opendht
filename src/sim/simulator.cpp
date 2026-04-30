@@ -8,39 +8,16 @@
 #include "opendht/sim/sim_socket.h"
 #include "opendht/sim/workload.h"
 
+#include "opendht/crypto.h"
+#include "opendht/infohash.h"
+
 #include <cstdio>
-#include <queue>
 #include <stdexcept>
-#include <vector>
 
 namespace dht {
 namespace sim {
 
 namespace {
-
-/** Three event kinds, ordered Timer < PacketArrival < Workload at the same time
- *  to keep the schedule deterministic in case of ties. */
-
-struct Event
-{
-    Simulator::time_point time;
-    EventKind kind;
-    uint64_t seq;
-    uint32_t a {0};
-    uint32_t b {0};
-    uint32_t c {0};
-    std::function<void()> run;
-
-    bool operator<(const Event& other) const
-    {
-        // std::priority_queue is a max-heap; invert so smallest time fires first.
-        if (time != other.time)
-            return time > other.time;
-        if (kind != other.kind)
-            return static_cast<uint8_t>(kind) > static_cast<uint8_t>(other.kind);
-        return seq > other.seq;
-    }
-};
 
 SockAddr
 makeNodeAddr(size_t i)
@@ -68,105 +45,90 @@ mix(uint64_t a, uint64_t b)
 
 } // namespace
 
-struct Simulator::Impl
-{
-    SimConfig cfg;
-    std::shared_ptr<SimClock::SteadyState> steady_state {std::make_shared<SimClock::SteadyState>()};
-    std::mt19937_64 rng;
-    std::priority_queue<Event> queue;
-    uint64_t next_seq {0};
-    std::shared_ptr<SimNetwork> network;
-    std::vector<std::unique_ptr<SimNode>> nodes;
-    std::vector<TraceRecord> trace;
-    std::shared_ptr<PacketRecorder> recorder;
-    Simulator::Counters counters {};
-
-    explicit Impl(SimConfig c)
-        : cfg(std::move(c))
-        , rng(cfg.seed)
-    {}
-
-    void enqueue(time_point at, EventKind k, std::function<void()> fn, uint32_t a = 0, uint32_t b = 0, uint32_t c = 0)
-    {
-        if (at < steady_state->now)
-            throw std::logic_error {"Simulator: attempted to schedule event in the past"};
-        queue.push(Event {at, k, next_seq++, a, b, c, std::move(fn)});
-    }
-
-    void scheduleNextWakeup(size_t i, std::chrono::steady_clock::time_point wakeup)
-    {
-        if (wakeup == std::chrono::steady_clock::time_point {} || wakeup == time_point::max())
-            return;
-        if (wakeup < steady_state->now)
-            wakeup = steady_state->now;
-        enqueue(wakeup, EventKind::Timer, [this, i]() { tickNode(i); }, static_cast<uint32_t>(i));
-    }
-
-    void tickNode(size_t i)
-    {
-        if (i >= nodes.size())
-            return;
-        auto& n = *nodes[i];
-        if (!n.runner)
-            return;
-        auto wakeup = n.runner->loop();
-        scheduleNextWakeup(i, wakeup);
-    }
-
-    void buildNodes();
-
-    /** Pop one event, advance the clock, record the trace, run the handler. */
-    void runOne()
-    {
-        Event e = queue.top();
-        queue.pop();
-        if (e.time > steady_state->now)
-            steady_state->now = e.time;
-        trace.push_back(TraceRecord {e.time, e.kind, e.seq, e.a, e.b, e.c});
-        switch (e.kind) {
-        case EventKind::Timer:
-            ++counters.timer_events;
-            break;
-        case EventKind::PacketArrival:
-            ++counters.packet_events;
-            break;
-        case EventKind::Workload:
-            ++counters.workload_events;
-            break;
-        }
-        e.run();
-    }
-};
+// ---------- private helpers -------------------------------------------------
 
 void
-Simulator::Impl::buildNodes()
+Simulator::enqueue(time_point at, EventKind k, std::function<void()> fn, uint32_t a, uint32_t b, uint32_t c)
 {
-    switch (cfg.packet_recorder) {
-    case PacketRecorderKind::None:
-        recorder.reset();
+    if (at < steady_state_->now)
+        throw std::logic_error {"Simulator: attempted to schedule event in the past"};
+    queue_.push(Event {at, k, next_seq_++, a, b, c, std::move(fn)});
+}
+
+void
+Simulator::scheduleNextWakeup(size_t i, time_point wakeup)
+{
+    if (wakeup == time_point {} || wakeup == time_point::max())
+        return;
+    if (wakeup < steady_state_->now)
+        wakeup = steady_state_->now;
+    scheduleTick(i, wakeup);
+}
+
+void
+Simulator::tickNode(size_t i)
+{
+    if (i >= nodes_.size())
+        return;
+    auto& n = *nodes_[i];
+    if (!n.runner)
+        return;
+    auto wakeup = n.runner->loop();
+    scheduleNextWakeup(i, wakeup);
+}
+
+void
+Simulator::runOne()
+{
+    Event e = queue_.top();
+    queue_.pop();
+    if (e.time > steady_state_->now)
+        steady_state_->now = e.time;
+    trace_.push_back(TraceRecord {e.time, e.kind, e.seq, e.a, e.b, e.c});
+    switch (e.kind) {
+    case EventKind::Timer:
+        ++counters_.timer_events;
         break;
-    case PacketRecorderKind::InMemory:
-        recorder = std::make_shared<InMemoryPacketRecorder>();
+    case EventKind::PacketArrival:
+        ++counters_.packet_events;
         break;
-    case PacketRecorderKind::Jsonl:
-        recorder = JsonlPacketRecorder::openFile(cfg.packet_recorder_file);
+    case EventKind::Workload:
+        ++counters_.workload_events;
         break;
     }
-    auto state = steady_state;
-    network = std::make_shared<SimNetwork>(
-        cfg.latency,
-        rng,
+    e.run();
+}
+
+void
+Simulator::buildNodes()
+{
+    switch (cfg_.packet_recorder) {
+    case PacketRecorderKind::None:
+        recorder_.reset();
+        break;
+    case PacketRecorderKind::InMemory:
+        recorder_ = std::make_shared<InMemoryPacketRecorder>();
+        break;
+    case PacketRecorderKind::Jsonl:
+        recorder_ = JsonlPacketRecorder::openFile(cfg_.packet_recorder_file);
+        break;
+    }
+    auto state = steady_state_;
+    network_ = std::make_shared<SimNetwork>(
+        cfg_.latency,
+        cfg_.drop_probability,
+        rng_,
         [this](size_t dst_id, size_t src_id, SockAddr src, Blob data, std::chrono::nanoseconds latency) {
-            auto deliver_at = steady_state->now + latency;
+            auto deliver_at = steady_state_->now + latency;
             auto size = static_cast<uint32_t>(data.size());
             enqueue(
                 deliver_at,
                 EventKind::PacketArrival,
                 [this, dst_id, src = std::move(src), data = std::move(data)]() mutable {
-                    if (dst_id >= nodes.size())
+                    if (dst_id >= nodes_.size())
                         return;
-                    auto& dst_node = *nodes[dst_id];
-                    if (auto* s = network->find(dst_node.addr))
+                    auto& dst_node = *nodes_[dst_id];
+                    if (auto* s = network_->find(dst_node.addr))
                         s->deliver(src, std::move(data));
                     // Drain rcv on the destination immediately after delivery.
                     tickNode(dst_id);
@@ -175,29 +137,29 @@ Simulator::Impl::buildNodes()
                 static_cast<uint32_t>(src_id),
                 size);
         },
-        recorder,
+        recorder_,
         [state]() { return state->now; });
 
-    nodes.reserve(cfg.node_count);
-    for (size_t i = 0; i < cfg.node_count; ++i) {
+    nodes_.reserve(cfg_.node_count);
+    for (size_t i = 0; i < cfg_.node_count; ++i) {
         auto n = std::make_unique<SimNode>();
         n->id = i;
         n->addr = makeNodeAddr(i);
 
         std::chrono::system_clock::duration skew {0};
-        if (cfg.system_clock_skew_max.count() > 0) {
-            std::uniform_int_distribution<long long> d(-cfg.system_clock_skew_max.count(),
-                                                       cfg.system_clock_skew_max.count());
-            skew = std::chrono::duration_cast<std::chrono::system_clock::duration>(std::chrono::milliseconds {d(rng)});
+        if (cfg_.system_clock_skew_max.count() > 0) {
+            std::uniform_int_distribution<long long> d(-cfg_.system_clock_skew_max.count(),
+                                                       cfg_.system_clock_skew_max.count());
+            skew = std::chrono::duration_cast<std::chrono::system_clock::duration>(std::chrono::milliseconds {d(rng_)});
         }
-        n->clock = std::make_shared<SimClock>(steady_state, skew);
+        n->clock = std::make_shared<SimClock>(steady_state_, skew);
         n->runner = std::make_shared<DhtRunner>();
 
         DhtRunner::Config rcfg {};
         rcfg.threaded = false;
-        if (cfg.identity_cache) {
+        if (cfg_.identity_cache) {
             try {
-                rcfg.dht_config.id = cfg.identity_cache->get(cfg.identity_seed, i);
+                rcfg.dht_config.id = cfg_.identity_cache->get(cfg_.identity_seed, i);
             } catch (const std::exception& e) {
                 throw std::runtime_error(std::string("Simulator: identity_cache->get failed for node ")
                                          + std::to_string(i) + ": " + e.what());
@@ -206,39 +168,36 @@ Simulator::Impl::buildNodes()
 
         DhtRunner::Context rctx;
         rctx.time = n->clock;
-        rctx.sock = std::make_unique<SimSocket>(i, n->addr, network, steady_state);
-        if (cfg.logger_override)
-            rctx.logger = cfg.logger_override;
-        else if (!cfg.quiet)
-            rctx.logger = makeSimLogger(steady_state, i);
-        rctx.rng = std::make_unique<std::mt19937_64>(mix(cfg.seed, static_cast<uint64_t>(i)));
+        rctx.sock = std::make_unique<SimSocket>(i, n->addr, network_, steady_state_);
+        if (cfg_.logger_override)
+            rctx.logger = cfg_.logger_override;
+        else if (cfg_.verbose)
+            rctx.logger = makeSimLogger(steady_state_, i);
+        rctx.rng = std::make_unique<std::mt19937_64>(mix(cfg_.seed, static_cast<uint64_t>(i)));
 
         n->runner->run(rcfg, std::move(rctx));
 
         // Schedule an initial tick so the scheduler bootstraps.
-        enqueue(steady_state->now, EventKind::Timer, [this, i]() { tickNode(i); }, static_cast<uint32_t>(i));
+        scheduleTick(i, steady_state_->now);
 
-        nodes.push_back(std::move(n));
+        nodes_.push_back(std::move(n));
     }
 }
 
 // ---------- public Simulator API --------------------------------------------
 
 Simulator::Simulator(SimConfig cfg)
-    : p_(std::make_unique<Impl>(std::move(cfg)))
+    : cfg_(std::move(cfg))
+    , rng_(cfg_.seed)
 {
-    if (!p_->cfg.latency)
-        p_->cfg.latency = std::make_shared<FixedLatency>(std::chrono::milliseconds {20});
-    p_->buildNodes();
+    buildNodes();
 }
 
 Simulator::~Simulator()
 {
-    if (!p_)
-        return;
     // Tear nodes down in reverse order. join() destroys the dht_, which owns
     // the SimSocket (which then unregisters from SimNetwork in its destructor).
-    for (auto it = p_->nodes.rbegin(); it != p_->nodes.rend(); ++it) {
+    for (auto it = nodes_.rbegin(); it != nodes_.rend(); ++it) {
         if ((*it)->runner)
             (*it)->runner->join();
     }
@@ -247,57 +206,58 @@ Simulator::~Simulator()
 SimNode&
 Simulator::node(size_t i)
 {
-    return *p_->nodes.at(i);
+    return *nodes_.at(i);
 }
+
 size_t
 Simulator::nodeCount() const
 {
-    return p_->nodes.size();
+    return nodes_.size();
 }
 
 void
 Simulator::bootstrapAll()
 {
-    if (p_->nodes.size() < 2)
+    if (nodes_.size() < 2)
         return;
-    auto& boot = *p_->nodes[0];
-    for (size_t i = 1; i < p_->nodes.size(); ++i) {
-        p_->nodes[i]->runner->bootstrap(boot.addr);
-        p_->enqueue(p_->steady_state->now, EventKind::Timer, [this, i]() { p_->tickNode(i); }, static_cast<uint32_t>(i));
+    auto& boot = *nodes_[0];
+    for (size_t i = 1; i < nodes_.size(); ++i) {
+        nodes_[i]->runner->bootstrap(boot.addr);
+        scheduleTick(i, steady_state_->now);
     }
 }
 
 Simulator::time_point
 Simulator::now() const
 {
-    return p_->steady_state->now;
+    return steady_state_->now;
 }
 
 void
 Simulator::runFor(std::chrono::nanoseconds d)
 {
-    runUntil(p_->steady_state->now + d);
+    runUntil(steady_state_->now + d);
 }
 
 void
 Simulator::runUntil(time_point deadline)
 {
-    while (!p_->queue.empty() && p_->queue.top().time <= deadline)
-        p_->runOne();
-    if (deadline > p_->steady_state->now)
-        p_->steady_state->now = deadline;
+    while (!queue_.empty() && queue_.top().time <= deadline)
+        runOne();
+    if (deadline > steady_state_->now)
+        steady_state_->now = deadline;
 }
 
 bool
 Simulator::runUntil(std::function<bool()> predicate, std::chrono::nanoseconds timeout)
 {
-    auto deadline = p_->steady_state->now + timeout;
+    auto deadline = steady_state_->now + timeout;
     while (!predicate()) {
-        if (p_->queue.empty() || p_->queue.top().time > deadline) {
-            p_->steady_state->now = deadline;
+        if (queue_.empty() || queue_.top().time > deadline) {
+            steady_state_->now = deadline;
             return predicate();
         }
-        p_->runOne();
+        runOne();
     }
     return true;
 }
@@ -305,84 +265,66 @@ Simulator::runUntil(std::function<bool()> predicate, std::chrono::nanoseconds ti
 std::mt19937_64&
 Simulator::rng()
 {
-    return p_->rng;
+    return rng_;
 }
 
 void
 Simulator::scheduleAt(time_point at, std::function<void()> fn)
 {
-    p_->enqueue(at, EventKind::Workload, std::move(fn));
+    enqueue(at, EventKind::Workload, std::move(fn));
 }
 
-std::shared_ptr<SimClock>
-Simulator::clockFor(size_t i) const
-{
-    return p_->nodes.at(i)->clock;
-}
 std::shared_ptr<SimNetwork>
 Simulator::network() const
 {
-    return p_->network;
+    return network_;
 }
 
 const Simulator::Counters&
 Simulator::counters() const noexcept
 {
-    return p_->counters;
+    return counters_;
 }
 
 std::shared_ptr<PacketRecorder>
 Simulator::packetRecorder() const
 {
-    return p_->recorder;
+    return recorder_;
 }
 
 void
 Simulator::scheduleTick(size_t i, time_point at)
 {
-    p_->enqueue(at, EventKind::Timer, [this, i]() { p_->tickNode(i); }, static_cast<uint32_t>(i));
+    enqueue(at, EventKind::Timer, [this, i]() { tickNode(i); }, static_cast<uint32_t>(i));
 }
 
 const std::vector<TraceRecord>&
 Simulator::trace() const
 {
-    return p_->trace;
+    return trace_;
 }
 
 std::string
 Simulator::traceHash() const
 {
-    // Simple FNV-1a 64-bit over the binary footprint of each trace record,
-    // returned as 16-char hex. SHA-256 was suggested in the design but FNV-1a
-    // is sufficient for spot-checks and avoids a new dependency.
-    uint64_t h = 0xcbf29ce484222325ULL;
-    auto mix = [&](const void* data, size_t n) {
+    // SHA-256 over the binary footprint of the trace, truncated to 16 hex chars.
+    Blob input;
+    input.reserve(trace_.size() * 32);
+    auto append = [&](const void* data, size_t n) {
         const auto* p = static_cast<const uint8_t*>(data);
-        for (size_t i = 0; i < n; ++i) {
-            h ^= p[i];
-            h *= 0x100000001b3ULL;
-        }
+        input.insert(input.end(), p, p + n);
     };
-    for (const auto& r : p_->trace) {
+    for (const auto& r : trace_) {
         auto t = r.time.time_since_epoch().count();
-        mix(&t, sizeof(t));
-        mix(&r.kind, sizeof(r.kind));
-        mix(&r.seq, sizeof(r.seq));
-        mix(&r.a, sizeof(r.a));
-        mix(&r.b, sizeof(r.b));
-        mix(&r.c, sizeof(r.c));
+        append(&t, sizeof(t));
+        append(&r.kind, sizeof(r.kind));
+        append(&r.seq, sizeof(r.seq));
+        append(&r.a, sizeof(r.a));
+        append(&r.b, sizeof(r.b));
+        append(&r.c, sizeof(r.c));
     }
-    char buf[17];
-    std::snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(h));
-    return std::string {buf};
-}
-
-bool
-runWorkload(SimConfig cfg, Workload& w, std::string& error_out)
-{
-    Simulator sim(std::move(cfg));
-    w.run(sim);
-    return w.verify(sim, error_out);
+    auto digest = crypto::hash(input, 32); // SHA-256
+    return toHex(digest.data(), 8);        // first 8 bytes -> 16 hex chars
 }
 
 } // namespace sim

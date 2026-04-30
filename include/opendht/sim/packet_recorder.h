@@ -9,7 +9,6 @@
 #include <cstdint>
 #include <iosfwd>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -53,7 +52,6 @@ public:
     const std::vector<PacketRecord>& packets() const noexcept { return packets_; }
 
 private:
-    mutable std::mutex mu_;
     std::vector<PacketRecord> packets_;
 };
 
@@ -72,7 +70,6 @@ public:
 private:
     std::shared_ptr<std::ostream> out_owner_;
     std::ostream& out_;
-    std::mutex mu_;
 };
 
 } // namespace sim

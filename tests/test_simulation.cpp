@@ -5,7 +5,6 @@
 #include <opendht/sim/simulator.h>
 #include <opendht/sim/sim_clock.h>
 #include <opendht/sim/sim_network.h>
-#include <opendht/sim/latency_model.h>
 
 #include <chrono>
 
@@ -16,14 +15,12 @@ CPPUNIT_TEST_SUITE_REGISTRATION(SimulationTester);
 using namespace std::chrono_literals;
 using dht::sim::SimConfig;
 using dht::sim::Simulator;
-using dht::sim::FixedLatency;
 
 void
 SimulationTester::testSimClockAdvance()
 {
     SimConfig cfg;
     cfg.node_count = 1;
-    cfg.quiet = true;
     Simulator sim(cfg);
     auto t0 = sim.now();
     sim.runFor(500ms);
@@ -37,7 +34,6 @@ SimulationTester::testSingleNodeStart()
     // ticks, and not crash.
     SimConfig cfg;
     cfg.node_count = 1;
-    cfg.quiet = true;
     Simulator sim(cfg);
     sim.runFor(2s);
     auto& n = sim.node(0);
@@ -53,8 +49,7 @@ SimulationTester::testTwoNodePacketDelivery()
     // are non-empty on both ends).
     SimConfig cfg;
     cfg.node_count = 2;
-    cfg.quiet = true;
-    cfg.latency = std::make_shared<FixedLatency>(10ms);
+    cfg.latency = 10ms;
     Simulator sim(cfg);
     sim.bootstrapAll();
 
@@ -77,8 +72,7 @@ SimulationTester::testMultiNodeBootstrap()
     // contact in the routing table.
     SimConfig cfg;
     cfg.node_count = 5;
-    cfg.quiet = true;
-    cfg.latency = std::make_shared<FixedLatency>(5ms);
+    cfg.latency = 5ms;
     Simulator sim(cfg);
     sim.bootstrapAll();
 
@@ -103,8 +97,7 @@ SimulationTester::testDeterministicTrace()
         SimConfig cfg;
         cfg.seed = seed;
         cfg.node_count = 3;
-        cfg.quiet = true;
-        cfg.latency = std::make_shared<FixedLatency>(7ms);
+        cfg.latency = 7ms;
         Simulator sim(cfg);
         sim.bootstrapAll();
         sim.runFor(2s);
@@ -134,7 +127,6 @@ SimulationTester::testCausalityAssertion()
     // processing events before the current time.
     SimConfig cfg;
     cfg.node_count = 1;
-    cfg.quiet = true;
     Simulator sim(cfg);
     sim.runFor(1s);
     bool threw = false;

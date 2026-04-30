@@ -783,7 +783,6 @@ if (OPENDHT_SIMULATION)
         include/opendht/sim/sim_socket.h
         include/opendht/sim/sim_network.h
         include/opendht/sim/sim_logger.h
-        include/opendht/sim/latency_model.h
         include/opendht/sim/simulator.h
         include/opendht/sim/workload.h
         include/opendht/sim/workloads.h

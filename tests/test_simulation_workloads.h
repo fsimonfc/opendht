@@ -12,7 +12,6 @@ class SimulationWorkloadsTester : public CppUnit::TestFixture
     CPPUNIT_TEST_SUITE(SimulationWorkloadsTester);
     CPPUNIT_TEST(testPutGetWorkload);
     CPPUNIT_TEST(testListenPutWorkload);
-    CPPUNIT_TEST(testRunWorkloadHelper);
     CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -21,7 +20,6 @@ public:
 
     void testPutGetWorkload();
     void testListenPutWorkload();
-    void testRunWorkloadHelper();
 };
 
 } // namespace test

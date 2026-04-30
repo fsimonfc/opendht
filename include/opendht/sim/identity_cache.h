@@ -7,7 +7,6 @@
 
 #include <cstdint>
 #include <map>
-#include <mutex>
 #include <string>
 
 namespace dht {
@@ -31,9 +30,6 @@ namespace sim {
  *
  * On-disk persistence is therefore an **optimization** (RSA-3072 keygen with
  * provable primes is slow), not a correctness mechanism.
- *
- * Thread-safety: serialized by an internal mutex. The cache is intended to be
- * shared across `Simulator` instances and across tests in the same process.
  */
 class OPENDHT_PUBLIC IdentityCache
 {
@@ -46,20 +42,12 @@ public:
      *  or crypto failure. */
     crypto::Identity get(uint64_t identity_seed, size_t index);
 
-    /** Path to the on-disk file used for `(identity_seed, index)` (without
-     *  extension; saveIdentity appends `.pem` and `.crt`). Empty if no
-     *  cache_dir was provided. */
-    std::string pathFor(uint64_t identity_seed, size_t index) const;
-
-    /** True if `pathFor(seed, index) + ".pem"` already exists on disk. */
+    /** True if on-disk cache files exist for `(identity_seed, index)`. */
     bool isPersisted(uint64_t identity_seed, size_t index) const;
 
-    /** Clear in-memory entries (does not touch the on-disk cache). */
-    void clearMemory();
-
 private:
+    std::string pathFor(uint64_t identity_seed, size_t index) const;
     std::string cache_dir_;
-    mutable std::mutex mu_;
     std::map<std::pair<uint64_t, size_t>, crypto::Identity> mem_;
 };
 

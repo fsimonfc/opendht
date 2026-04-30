@@ -15,7 +15,6 @@ namespace sim {
 void
 InMemoryPacketRecorder::record(const PacketRecord& p)
 {
-    std::lock_guard<std::mutex> lk(mu_);
     packets_.push_back(p);
 }
 
@@ -37,7 +36,6 @@ JsonlPacketRecorder::openFile(const std::string& path)
 void
 JsonlPacketRecorder::record(const PacketRecord& p)
 {
-    std::lock_guard<std::mutex> lk(mu_);
     fmt::print(out_,
                "{{\"t\":{},\"src\":{},\"dst\":{},\"size\":{},\"dropped\":{}}}\n",
                p.t.time_since_epoch().count(),
@@ -50,7 +48,6 @@ JsonlPacketRecorder::record(const PacketRecord& p)
 void
 JsonlPacketRecorder::flush()
 {
-    std::lock_guard<std::mutex> lk(mu_);
     out_.flush();
 }
 

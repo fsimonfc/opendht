@@ -4,7 +4,6 @@
 
 #include <opendht/sim/simulator.h>
 #include <opendht/sim/workloads.h>
-#include <opendht/sim/latency_model.h>
 
 #include <chrono>
 #include <string>
@@ -14,7 +13,6 @@ namespace test {
 CPPUNIT_TEST_SUITE_REGISTRATION(SimulationWorkloadsTester);
 
 using namespace std::chrono_literals;
-using dht::sim::FixedLatency;
 using dht::sim::ListenPutWorkload;
 using dht::sim::PutGetWorkload;
 using dht::sim::SimConfig;
@@ -25,8 +23,7 @@ SimulationWorkloadsTester::testPutGetWorkload()
 {
     SimConfig cfg;
     cfg.node_count = 4;
-    cfg.quiet = true;
-    cfg.latency = std::make_shared<FixedLatency>(5ms);
+    cfg.latency = 5ms;
     Simulator sim(cfg);
 
     PutGetWorkload::Options o;
@@ -46,8 +43,7 @@ SimulationWorkloadsTester::testListenPutWorkload()
 {
     SimConfig cfg;
     cfg.node_count = 3;
-    cfg.quiet = true;
-    cfg.latency = std::make_shared<FixedLatency>(5ms);
+    cfg.latency = 5ms;
     Simulator sim(cfg);
 
     ListenPutWorkload::Options o;
@@ -59,25 +55,6 @@ SimulationWorkloadsTester::testListenPutWorkload()
 
     std::string err;
     bool ok = w.verify(sim, err);
-    CPPUNIT_ASSERT_MESSAGE(err, ok);
-}
-
-void
-SimulationWorkloadsTester::testRunWorkloadHelper()
-{
-    SimConfig cfg;
-    cfg.node_count = 3;
-    cfg.quiet = true;
-    cfg.latency = std::make_shared<FixedLatency>(5ms);
-
-    PutGetWorkload::Options o;
-    o.op_count = 2;
-    o.writer = 0;
-    o.reader = 1;
-    PutGetWorkload w(o);
-
-    std::string err;
-    bool ok = dht::sim::runWorkload(cfg, w, err);
     CPPUNIT_ASSERT_MESSAGE(err, ok);
 }
 

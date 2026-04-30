@@ -10,15 +10,19 @@
 #include <opendht/sim/simulator.h>
 #include <opendht/sim/workloads.h>
 
+#ifndef _WIN32
+#include <getopt.h>
+#else
+#include "wingetopt.h"
+#endif
+
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <iostream>
 #include <memory>
 #include <string>
-#include <string_view>
 
 namespace {
 
@@ -27,30 +31,46 @@ printUsage(const char* prog)
 {
     std::fprintf(stderr,
                  "Usage: %s [options]\n"
-                 "  --seed N                    simulator seed (default 0xC0FFEE)\n"
-                 "  --identity-seed N           crypto identity seed (default 0xDEADBEEF)\n"
-                 "  --identities                generate per-node crypto identities (in-memory cache)\n"
-                 "  --identity-cache-dir DIR    persistent identity cache directory (implies --identities)\n"
-                 "  --nodes N                   number of simulated nodes (default 4)\n"
-                 "  --duration S                when no workload, free-run for S seconds (default 60)\n"
-                 "  --workload NAME             one of: PutGet, ListenPut\n"
-                 "  --latency MS                one-way latency in ms (default 20)\n"
-                 "  --drop P                    packet drop probability 0.0-1.0 (default 0)\n"
-                 "  --system-clock-skew-max MS  per-node systemNow() skew bound (default 0)\n"
-                 "  --packet-recorder-file PATH record packets as JSONL to PATH\n"
-                 "  --counters                  print event/network counters at end\n"
-                 "  --verbose                   enable per-node logging\n"
-                 "  --trace-hash                print FNV-1a hash of the event trace\n"
-                 "  --list-workloads            list available workloads and exit\n"
-                 "  --help                      this message\n",
+                 "--seed N                    simulator seed (default 0xC0FFEE)\n"
+                 "--identity-seed N           crypto identity seed (default 0xDEADBEEF)\n"
+                 "--identities                generate per-node crypto identities (in-memory cache)\n"
+                 "--identity-cache-dir DIR    persistent identity cache directory (implies -i)\n"
+                 "--nodes N                   number of simulated nodes (default 4)\n"
+                 "--duration S                when no workload, free-run for S seconds (default 60)\n"
+                 "--workload NAME             one of: PutGet, ListenPut\n"
+                 "--latency MS                one-way latency in ms (default 20)\n"
+                 "--drop P                    packet drop probability 0.0-1.0 (default 0)\n"
+                 "--system-clock-skew-max MS  per-node systemNow() skew bound (default 0)\n"
+                 "--packet-recorder-file PATH record packets as JSONL to PATH\n"
+                 "--counters                  print event/network counters at end\n"
+                 "--trace-hash                print hash of the event trace\n"
+                 "--list-workloads            list available workloads and exit\n"
+                 "-v, --verbose               enable per-node logging\n"
+                 "-h, --help                  this message\n",
                  prog);
 }
 
-uint64_t
-parseUint(std::string_view s)
-{
-    return std::strtoull(std::string {s}.c_str(), nullptr, 0);
-}
+// clang-format off
+static const struct option long_options[] = {
+    {"seed",                  required_argument, nullptr, 's'},
+    {"identity-seed",         required_argument, nullptr, 'I'},
+    {"identities",            no_argument,       nullptr, 'i'},
+    {"identity-cache-dir",    required_argument, nullptr, 'C'},
+    {"nodes",                 required_argument, nullptr, 'n'},
+    {"duration",              required_argument, nullptr, 'd'},
+    {"workload",              required_argument, nullptr, 'w'},
+    {"latency",               required_argument, nullptr, 'l'},
+    {"drop",                  required_argument, nullptr, 'D'},
+    {"system-clock-skew-max", required_argument, nullptr, 'S'},
+    {"packet-recorder-file",  required_argument, nullptr, 'r'},
+    {"counters",              no_argument,       nullptr, 'c'},
+    {"verbose",               no_argument,       nullptr, 'v'},
+    {"trace-hash",            no_argument,       nullptr, 't'},
+    {"list-workloads",        no_argument,       nullptr, 'L'},
+    {"help",                  no_argument,       nullptr, 'h'},
+    {nullptr,                 0,                 nullptr,  0 }
+};
+// clang-format on
 
 } // namespace
 
@@ -63,7 +83,7 @@ main(int argc, char** argv)
     SimConfig cfg;
     cfg.node_count = 4;
     std::chrono::seconds duration {60};
-    std::string_view workload_name;
+    std::string workload_name;
     bool trace_hash = false;
     bool list_workloads = false;
 
@@ -72,61 +92,60 @@ main(int argc, char** argv)
 
     bool print_counters = false;
 
-    for (int i = 1; i < argc; ++i) {
-        std::string_view a = argv[i];
-        auto need = [&](int n) {
-            if (i + n >= argc) {
-                std::fprintf(stderr, "missing value for %.*s\n", static_cast<int>(a.size()), a.data());
-                std::exit(2);
-            }
-        };
-        if (a == "--help" || a == "-h") {
+    int opt;
+    while ((opt = getopt_long(argc, argv, "vh", long_options, nullptr)) != -1) {
+        switch (opt) {
+        case 's':
+            cfg.seed = std::strtoull(optarg, nullptr, 0);
+            break;
+        case 'I':
+            cfg.identity_seed = std::strtoull(optarg, nullptr, 0);
+            break;
+        case 'i':
+            use_identities = true;
+            break;
+        case 'C':
+            identity_cache_dir = optarg;
+            use_identities = true;
+            break;
+        case 'n':
+            cfg.node_count = std::strtoull(optarg, nullptr, 0);
+            break;
+        case 'd':
+            duration = std::chrono::seconds {std::strtoull(optarg, nullptr, 0)};
+            break;
+        case 'w':
+            workload_name = optarg;
+            break;
+        case 'l':
+            cfg.latency = std::chrono::milliseconds {std::strtoull(optarg, nullptr, 0)};
+            break;
+        case 'D':
+            cfg.drop_probability = std::strtod(optarg, nullptr);
+            break;
+        case 'S':
+            cfg.system_clock_skew_max = std::chrono::milliseconds {std::strtoull(optarg, nullptr, 0)};
+            break;
+        case 'r':
+            cfg.packet_recorder_file = optarg;
+            cfg.packet_recorder = PacketRecorderKind::Jsonl;
+            break;
+        case 'c':
+            print_counters = true;
+            break;
+        case 'v':
+            cfg.verbose = true;
+            break;
+        case 't':
+            trace_hash = true;
+            break;
+        case 'L':
+            list_workloads = true;
+            break;
+        case 'h':
             printUsage(argv[0]);
             return 0;
-        } else if (a == "--seed") {
-            need(1);
-            cfg.seed = parseUint(argv[++i]);
-        } else if (a == "--identity-seed") {
-            need(1);
-            cfg.identity_seed = parseUint(argv[++i]);
-        } else if (a == "--identities") {
-            use_identities = true;
-        } else if (a == "--identity-cache-dir") {
-            need(1);
-            identity_cache_dir = argv[++i];
-            use_identities = true;
-        } else if (a == "--nodes") {
-            need(1);
-            cfg.node_count = parseUint(argv[++i]);
-        } else if (a == "--duration") {
-            need(1);
-            duration = std::chrono::seconds {parseUint(argv[++i])};
-        } else if (a == "--workload") {
-            need(1);
-            workload_name = argv[++i];
-        } else if (a == "--latency") {
-            need(1);
-            cfg.latency = std::chrono::milliseconds {parseUint(argv[++i])};
-        } else if (a == "--drop") {
-            need(1);
-            cfg.drop_probability = std::strtod(std::string {argv[++i]}.c_str(), nullptr);
-        } else if (a == "--system-clock-skew-max") {
-            need(1);
-            cfg.system_clock_skew_max = std::chrono::milliseconds {parseUint(argv[++i])};
-        } else if (a == "--packet-recorder-file") {
-            need(1);
-            cfg.packet_recorder_file = argv[++i];
-            cfg.packet_recorder = PacketRecorderKind::Jsonl;
-        } else if (a == "--counters") {
-            print_counters = true;
-        } else if (a == "--verbose") {
-            cfg.verbose = true;
-        } else if (a == "--trace-hash") {
-            trace_hash = true;
-        } else if (a == "--list-workloads") {
-            list_workloads = true;
-        } else {
-            std::fprintf(stderr, "unknown option: %.*s\n", static_cast<int>(a.size()), a.data());
+        default:
             printUsage(argv[0]);
             return 2;
         }

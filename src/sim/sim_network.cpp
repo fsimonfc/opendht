@@ -34,9 +34,9 @@ SimNetwork::SimNetwork(std::chrono::milliseconds latency,
 }
 
 void
-SimNetwork::registerSocket(SimSocket& s)
+SimNetwork::registerSocket(const SockAddr& addr, SimSocket& s)
 {
-    sockets_[keyOf(s.addr())] = &s;
+    sockets_[keyOf(addr)] = &s;
 }
 
 void
@@ -59,8 +59,6 @@ SimNetwork::send(const SockAddr& src, const SockAddr& dst, const uint8_t* data, 
     if (!dst_sock)
         return -1; // unknown destination => silently drop, mimics UDP behavior
     auto* src_sock = find(src);
-    size_t src_id = src_sock ? src_sock->nodeId() : static_cast<size_t>(-1);
-    size_t dst_id = dst_sock->nodeId();
 
     bool dropped = false;
     if (drop_probability_ > 0.0) {
@@ -77,12 +75,12 @@ SimNetwork::send(const SockAddr& src, const SockAddr& dst, const uint8_t* data, 
     }
     if (recorder_) {
         auto t = now_ ? now_() : std::chrono::steady_clock::time_point {};
-        recorder_->record(PacketRecord {t, src_id, dst_id, size, dropped});
+        recorder_->record(PacketRecord {t, src_sock->nodeId(), dst_sock->nodeId(), size, dropped});
     }
     if (dropped)
         return static_cast<int>(size);
     Blob payload(data, data + size);
-    deliver_(dst_id, src_id, src, std::move(payload), latency_);
+    deliver_(*dst_sock, *src_sock, src, std::move(payload), latency_);
     return static_cast<int>(size);
 }
 

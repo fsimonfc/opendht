@@ -19,18 +19,6 @@ namespace sim {
 
 namespace {
 
-SockAddr
-makeNodeAddr(size_t i)
-{
-    SockAddr a;
-    a.setFamily(AF_INET);
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "10.0.0.%zu", (i % 254) + 1);
-    a.setAddress(buf);
-    a.setPort(net::DHT_DEFAULT_PORT);
-    return a;
-}
-
 uint64_t
 mix(uint64_t a, uint64_t b)
 {
@@ -99,6 +87,44 @@ Simulator::runOne()
     e.run();
 }
 
+std::pair<SockAddr, SockAddr>
+Simulator::makeNodeAddrs(size_t i)
+{
+    std::uniform_int_distribution<uint16_t> portDist(1024, 65535);
+
+    SockAddr a4, a6;
+    bool bind4 = true, bind6 = true;
+    // Simulate some nodes being single-stack by randomly failing to bind one of the families.
+    // (Only applied to i > 0 to ensure node 0 is always dual-stack for bootstrapping.)
+    if (i > 0 && cfg_.bind_failure_probability > 0.0) {
+        std::uniform_real_distribution<double> dist(0.0, 1.0);
+        if (dist(rng_) < cfg_.bind_failure_probability) {
+            if (dist(rng_) < 0.5)
+                bind4 = false;
+            else
+                bind6 = false;
+        }
+    }
+
+    if (bind4) {
+        a4.setFamily(AF_INET);
+        char buf4[32];
+        std::snprintf(buf4, sizeof(buf4), "10.%zu.%zu.%zu", (i / (254 * 254)) % 255, (i / 254) % 254, (i % 254) + 1);
+        a4.setAddress(buf4);
+        a4.setPort(portDist(rng_));
+    }
+
+    if (bind6) {
+        a6.setFamily(AF_INET6);
+        char buf6[64];
+        std::snprintf(buf6, sizeof(buf6), "fd00::%zx", i + 1);
+        a6.setAddress(buf6);
+        a6.setPort(portDist(rng_));
+    }
+
+    return {a4, a6};
+}
+
 void
 Simulator::buildNodes()
 {
@@ -118,23 +144,19 @@ Simulator::buildNodes()
         cfg_.latency,
         cfg_.drop_probability,
         rng_,
-        [this](size_t dst_id, size_t src_id, SockAddr src, Blob data, std::chrono::nanoseconds latency) {
+        [this](SimSocket& dst_sock, const SimSocket& src_sock, SockAddr src, Blob data, std::chrono::nanoseconds latency) {
             auto deliver_at = steady_state_->now + latency;
             auto size = static_cast<uint32_t>(data.size());
             enqueue(
                 deliver_at,
                 EventKind::PacketArrival,
-                [this, dst_id, src = std::move(src), data = std::move(data)]() mutable {
-                    if (dst_id >= nodes_.size())
-                        return;
-                    auto& dst_node = *nodes_[dst_id];
-                    if (auto* s = network_->find(dst_node.addr))
-                        s->deliver(src, std::move(data));
+                [this, &dst_sock, &src_sock, src = std::move(src), data = std::move(data)]() mutable {
+                    dst_sock.deliver(src, std::move(data));
                     // Drain rcv on the destination immediately after delivery.
-                    tickNode(dst_id);
+                    tickNode(dst_sock.nodeId());
                 },
-                static_cast<uint32_t>(dst_id),
-                static_cast<uint32_t>(src_id),
+                static_cast<uint32_t>(dst_sock.nodeId()),
+                static_cast<uint32_t>(src_sock.nodeId()),
                 size);
         },
         recorder_,
@@ -144,7 +166,9 @@ Simulator::buildNodes()
     for (size_t i = 0; i < cfg_.node_count; ++i) {
         auto n = std::make_unique<SimNode>();
         n->id = i;
-        n->addr = makeNodeAddr(i);
+        auto [addr4, addr6] = makeNodeAddrs(i);
+        n->addr4 = addr4;
+        n->addr6 = addr6;
 
         std::chrono::system_clock::duration skew {0};
         if (cfg_.system_clock_skew_max.count() > 0) {
@@ -168,7 +192,7 @@ Simulator::buildNodes()
 
         DhtRunner::Context rctx;
         rctx.time = n->clock;
-        rctx.sock = std::make_unique<SimSocket>(i, n->addr, network_, steady_state_);
+        rctx.sock = std::make_unique<SimSocket>(i, n->addr4, n->addr6, network_, steady_state_);
         if (cfg_.logger_override)
             rctx.logger = cfg_.logger_override;
         else if (cfg_.verbose)
@@ -222,7 +246,10 @@ Simulator::bootstrapAll()
         return;
     auto& boot = *nodes_[0];
     for (size_t i = 1; i < nodes_.size(); ++i) {
-        nodes_[i]->runner->bootstrap(boot.addr);
+        if (boot.addr4)
+            nodes_[i]->runner->bootstrap(boot.addr4);
+        if (boot.addr6)
+            nodes_[i]->runner->bootstrap(boot.addr6);
         scheduleTick(i, steady_state_->now);
     }
 }

@@ -7,30 +7,38 @@ namespace dht {
 namespace sim {
 
 SimSocket::SimSocket(size_t node_id,
-                     SockAddr addr,
+                     SockAddr addr4,
+                     SockAddr addr6,
                      std::shared_ptr<SimNetwork> net,
                      std::shared_ptr<SimClock::SteadyState> clock_state)
     : node_id_(node_id)
-    , bound_(std::move(addr))
+    , bound4_(std::move(addr4))
+    , bound6_(std::move(addr6))
     , network_(std::move(net))
     , clock_state_(std::move(clock_state))
 {
-    if (network_)
-        network_->registerSocket(*this);
+    if (network_) {
+        if (bound4_)
+            network_->registerSocket(bound4_, *this);
+        if (bound6_)
+            network_->registerSocket(bound6_, *this);
+    }
 }
 
 SimSocket::~SimSocket()
 {
-    if (network_)
-        network_->unregisterSocket(bound_);
+    if (network_) {
+        if (bound4_)
+            network_->unregisterSocket(bound4_);
+        if (bound6_)
+            network_->unregisterSocket(bound6_);
+    }
 }
 
 const SockAddr&
 SimSocket::getBoundRef(sa_family_t family) const
 {
-    if (family == AF_UNSPEC || family == bound_.getFamily())
-        return bound_;
-    return unbound_;
+    return (family == AF_INET6) ? bound6_ : bound4_;
 }
 
 int
@@ -38,7 +46,10 @@ SimSocket::sendTo(const SockAddr& dest, const uint8_t* data, size_t size, bool /
 {
     if (stopped_ || !network_)
         return -1;
-    return network_->send(bound_, dest, data, size);
+    const SockAddr& src = (dest.getFamily() == AF_INET6) ? bound6_ : bound4_;
+    if (!src)
+        return EAFNOSUPPORT;
+    return network_->send(src, dest, data, size);
 }
 
 void

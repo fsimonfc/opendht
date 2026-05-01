@@ -73,6 +73,12 @@ struct SimConfig
     std::chrono::milliseconds latency {20};
     /** Probability that any given packet is dropped (0.0 = no loss, 1.0 = total loss). */
     double drop_probability {0.0};
+    /**
+     * Probability that a node fails to bind one of the two address families (IPv4 or IPv6).
+     * When non-zero, each node independently has this chance of being bound to only one
+     * address family (chosen at random). 0.0 = all nodes are dual-stack.
+     */
+    double bind_failure_probability {0.0};
     /** Optional logger override. If unset, a SimLogger writing to stderr is used. */
     std::shared_ptr<Logger> logger_override;
     /** Selects the per-packet recorder built by `Simulator`. */
@@ -95,7 +101,8 @@ struct SimConfig
 struct SimNode
 {
     size_t id {};
-    SockAddr addr;
+    SockAddr addr4;
+    SockAddr addr6;
     std::shared_ptr<DhtRunner> runner;
     std::shared_ptr<SimClock> clock;
 };
@@ -177,6 +184,7 @@ private:
     void scheduleNextWakeup(size_t i, time_point wakeup);
     void tickNode(size_t i);
     void buildNodes();
+    std::pair<SockAddr, SockAddr> makeNodeAddrs(size_t i);
     void runOne();
 
     SimConfig cfg_;

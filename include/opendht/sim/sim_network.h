@@ -36,7 +36,7 @@ public:
     };
 
     using DeliverHook = std::function<
-        void(size_t dst_node_id, size_t src_node_id, SockAddr src, Blob data, std::chrono::nanoseconds latency)>;
+        void(SimSocket& dst_sock, const SimSocket& src_sock, SockAddr src, Blob data, std::chrono::nanoseconds latency)>;
 
     SimNetwork(std::chrono::milliseconds latency,
                double drop_probability,
@@ -45,7 +45,7 @@ public:
                std::shared_ptr<PacketRecorder> recorder = {},
                std::function<std::chrono::steady_clock::time_point()> now = {});
 
-    void registerSocket(SimSocket& s);
+    void registerSocket(const SockAddr& addr, SimSocket& s);
     void unregisterSocket(const SockAddr& addr);
 
     int send(const SockAddr& src, const SockAddr& dst, const uint8_t* data, size_t size);

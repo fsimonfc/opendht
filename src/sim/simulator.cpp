@@ -17,22 +17,6 @@
 namespace dht {
 namespace sim {
 
-namespace {
-
-uint64_t
-mix(uint64_t a, uint64_t b)
-{
-    uint64_t x = a + 0x9E3779B97F4A7C15ULL + (b << 6) + (b >> 2);
-    x ^= x >> 30;
-    x *= 0xBF58476D1CE4E5B9ULL;
-    x ^= x >> 27;
-    x *= 0x94D049BB133111EBULL;
-    x ^= x >> 31;
-    return x;
-}
-
-} // namespace
-
 // ---------- private helpers -------------------------------------------------
 
 void
@@ -197,7 +181,7 @@ Simulator::buildNodes()
             rctx.logger = cfg_.logger_override;
         else if (cfg_.verbose)
             rctx.logger = makeSimLogger(steady_state_, i);
-        rctx.rng = std::make_unique<std::mt19937_64>(mix(cfg_.seed, static_cast<uint64_t>(i)));
+        rctx.rng = std::make_unique<std::mt19937_64>(std::uniform_int_distribution<uint64_t>()(rng_));
 
         n->runner->run(rcfg, std::move(rctx));
 

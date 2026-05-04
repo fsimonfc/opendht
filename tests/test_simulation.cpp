@@ -100,7 +100,7 @@ SimulationTester::testDeterministicTrace()
         cfg.latency = 7ms;
         Simulator sim(cfg);
         sim.bootstrapAll();
-        sim.runFor(2s);
+        sim.runFor(20s);
         return std::pair {sim.trace(), sim.traceHash()};
     };
 

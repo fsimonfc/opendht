@@ -134,8 +134,8 @@ public:
     // ---- topology -----------------------------------------------------------
     SimNode& node(size_t i);
     size_t nodeCount() const;
-    /** Wire each node (i > 0) to node(0) via DhtRunner::bootstrap. */
-    void bootstrapAll();
+    /** Bootstrap all nodes at random times within `maxDuration` from now. */
+    void bootstrapAll(std::chrono::milliseconds maxDuration = std::chrono::milliseconds {15000});
 
     // ---- time & control -----------------------------------------------------
     time_point now() const;

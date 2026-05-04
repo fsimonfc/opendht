@@ -185,11 +185,11 @@ Simulator::buildNodes()
 
         n->runner->run(rcfg, std::move(rctx));
 
-        // Schedule an initial tick so the scheduler bootstraps.
-        scheduleTick(i, steady_state_->now);
-
         nodes_.push_back(std::move(n));
     }
+
+    // Schedule an initial tick for the bootstrap node to start its event loop.
+    scheduleTick(0, steady_state_->now);
 }
 
 // ---------- public Simulator API --------------------------------------------
@@ -224,17 +224,17 @@ Simulator::nodeCount() const
 }
 
 void
-Simulator::bootstrapAll()
+Simulator::bootstrapAll(std::chrono::milliseconds maxDuration)
 {
-    if (nodes_.size() < 2)
-        return;
-    auto& boot = *nodes_[0];
+    std::uniform_int_distribution<uint64_t> dist(0, maxDuration.count());
     for (size_t i = 1; i < nodes_.size(); ++i) {
-        if (boot.addr4)
+        auto bootstrap_at = steady_state_->now + std::chrono::milliseconds {dist(rng_)};
+        enqueue(bootstrap_at, EventKind::Workload, [this, i]() {
+            auto& boot = *nodes_[0];
             nodes_[i]->runner->bootstrap(boot.addr4);
-        if (boot.addr6)
             nodes_[i]->runner->bootstrap(boot.addr6);
-        scheduleTick(i, steady_state_->now);
+            scheduleTick(i, steady_state_->now);
+        });
     }
 }
 

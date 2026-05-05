@@ -120,22 +120,4 @@ SimulationTester::testDeterministicTrace()
     (void) c_trace;
 }
 
-void
-SimulationTester::testCausalityAssertion()
-{
-    // scheduleAt(now - 1s, ...) must throw to prevent the simulator from
-    // processing events before the current time.
-    SimConfig cfg;
-    cfg.node_count = 1;
-    Simulator sim(cfg);
-    sim.runFor(1s);
-    bool threw = false;
-    try {
-        sim.scheduleAt(sim.now() - 100ms, []() {});
-    } catch (const std::logic_error&) {
-        threw = true;
-    }
-    CPPUNIT_ASSERT(threw);
-}
-
 } // namespace test

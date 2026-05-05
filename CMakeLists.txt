@@ -779,6 +779,7 @@ if (OPENDHT_SIMULATION)
         src/sim/workloads.cpp
         src/sim/identity_cache.cpp
         src/sim/packet_recorder.cpp
+        src/sim/node_op_recorder.cpp
         include/opendht/sim/sim_clock.h
         include/opendht/sim/sim_socket.h
         include/opendht/sim/sim_network.h
@@ -788,6 +789,9 @@ if (OPENDHT_SIMULATION)
         include/opendht/sim/workloads.h
         include/opendht/sim/identity_cache.h
         include/opendht/sim/packet_recorder.h
+        include/opendht/sim/node_op_record.h
+        include/opendht/sim/node_op_recorder.h
+        include/opendht/node_op.h
     )
     target_link_libraries(opendht-sim PUBLIC opendht)
     target_include_directories(opendht-sim PUBLIC

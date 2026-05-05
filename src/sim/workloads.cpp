@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "opendht/sim/workloads.h"
 #include "opendht/sim/simulator.h"
+#include "opendht/node_op.h"
 
 #include <fmt/format.h>
 
@@ -32,7 +33,6 @@ PutGetWorkload::run(Simulator& sim)
     const size_t writer = std::min(opt_.writer, sim.nodeCount() - 1);
     const size_t reader = std::min(opt_.reader, sim.nodeCount() - 1);
 
-    auto& wnode = sim.node(writer);
     entries_.reserve(opt_.op_count);
     for (size_t i = 0; i < opt_.op_count; ++i) {
         auto e = std::make_unique<Entry>();
@@ -40,9 +40,9 @@ PutGetWorkload::run(Simulator& sim)
             fmt::format("putget-key-{:08x}-{:04x}", static_cast<uint32_t>(i), static_cast<uint16_t>(i * 7919)));
         std::string payload = fmt::format("v{:08x}", static_cast<uint32_t>(0xC0FFEE + i));
         e->expected.assign(payload.begin(), payload.end());
-        Value v(e->expected);
         Entry* eptr = e.get();
-        wnode.runner->put(eptr->key, std::move(v), [eptr](bool ok) { eptr->put_ok = ok; });
+        sim.schedule(
+            NodeOp {OpCode::Put, writer, eptr->key, 0, Blob(eptr->expected), [eptr](bool ok) { eptr->put_ok = ok; }, {}});
         entries_.push_back(std::move(e));
     }
 
@@ -55,21 +55,17 @@ PutGetWorkload::run(Simulator& sim)
         },
         opt_.put_timeout);
 
-    auto& rnode = sim.node(reader);
     for (auto& e : entries_) {
         Entry* eptr = e.get();
-        rnode.runner->get(
-            eptr->key,
-            [eptr](const std::vector<Sp<Value>>& vals) {
-                for (auto& v : vals) {
-                    if (v && v->data == eptr->expected) {
-                        eptr->get_ok = true;
-                        return false; // stop iterating; we found ours
-                    }
-                }
-                return true;
-            },
-            [](bool /*done*/) {});
+        sim.schedule(NodeOp {OpCode::Get, reader, eptr->key, 0, {}, {}, [eptr](const std::vector<Sp<Value>>& vals) {
+                                 for (auto& v : vals) {
+                                     if (v && v->data == eptr->expected) {
+                                         eptr->get_ok = true;
+                                         return false;
+                                     }
+                                 }
+                                 return true;
+                             }});
     }
 
     sim.runUntil(
@@ -125,19 +121,18 @@ ListenPutWorkload::run(Simulator& sim)
 
     key_ = InfoHash::get("listenput-key");
 
-    sim.node(listener).runner->listen(key_, [this](const std::vector<Sp<Value>>& vals) {
-        hits_.fetch_add(vals.size());
-        return true;
-    });
+    sim.schedule(NodeOp {OpCode::Listen, listener, key_, 0, {}, {}, [this](const std::vector<Sp<Value>>& vals) {
+                             hits_.fetch_add(vals.size());
+                             return true;
+                         }});
 
     // Give the listen a chance to register on the network before publishing.
     sim.runFor(200ms);
 
     for (size_t i = 0; i < opt_.expected_hits; ++i) {
         auto payload = fmt::format("listenput-{:04x}", static_cast<uint16_t>(i));
-        Value v {Blob(payload.begin(), payload.end())};
-        v.id = static_cast<uint64_t>(i + 1);
-        sim.node(writer).runner->put(key_, std::move(v));
+        Blob data(payload.begin(), payload.end());
+        sim.schedule(NodeOp {OpCode::Put, writer, key_, static_cast<uint64_t>(i + 1), std::move(data), {}, {}});
     }
 
     sim.runUntil([this]() { return hits_.load() >= opt_.expected_hits; }, opt_.run_timeout);

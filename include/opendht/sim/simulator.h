@@ -4,8 +4,10 @@
 
 #include "../def.h"
 #include "../dhtrunner.h"
+#include "../node_op.h"
 #include "../sockaddr.h"
 #include "identity_cache.h"
+#include "node_op_record.h"
 #include "packet_recorder.h"
 #include "sim_clock.h"
 
@@ -21,6 +23,7 @@
 namespace dht {
 namespace sim {
 
+class NodeOpRecorder;
 class SimNetwork;
 class SimSocket;
 class Workload;
@@ -94,6 +97,10 @@ struct SimConfig
     std::shared_ptr<IdentityCache> identity_cache;
     /** When true, enable per-node SimLogger output. */
     bool verbose {false};
+    /** When true, record all node operations (Put/Get/Listen etc.) executed via schedule(). */
+    bool record_node_ops {false};
+    /** Output path for node-operation JSONL dump. Ignored when record_node_ops is false. */
+    std::string node_ops_file;
 };
 
 /** A single simulated node: non-threaded DhtRunner + clock. The DatagramSocket
@@ -146,7 +153,10 @@ public:
 
     // ---- workload helpers ---------------------------------------------------
     std::mt19937_64& rng();
-    void scheduleAt(time_point at, std::function<void()> fn);
+    /** Schedule a typed node operation at a given simulated time. */
+    void schedule(time_point at, NodeOp op);
+    /** Schedule a typed node operation at the current simulated time. */
+    void schedule(NodeOp op);
 
     // ---- internals ----------------------------------------------------------
     std::shared_ptr<SimNetwork> network() const;
@@ -154,6 +164,8 @@ public:
     const Metrics& metrics() const noexcept;
     /** Active per-packet recorder (may be null when configured as `None`). */
     std::shared_ptr<PacketRecorder> packetRecorder() const;
+    /** Active node-operation recorder (may be null when disabled). */
+    std::shared_ptr<NodeOpRecorder> nodeOpRecorder() const;
     /** Schedule a Timer that calls `runner->loop()` on node `i` at `at`. */
     void scheduleTick(size_t i, time_point at);
     /** Deterministic event trace (one entry per popped event). */
@@ -181,6 +193,7 @@ private:
     };
 
     void enqueue(time_point at, EventKind k, std::function<void()> fn, uint32_t a = 0, uint32_t b = 0, uint32_t c = 0);
+    void executeOp(NodeOp op);
     void scheduleNextWakeup(size_t i, time_point wakeup);
     void tickNode(size_t i);
     void buildNodes();
@@ -196,6 +209,7 @@ private:
     std::vector<std::unique_ptr<SimNode>> nodes_;
     std::vector<TraceRecord> trace_;
     std::shared_ptr<PacketRecorder> recorder_;
+    std::shared_ptr<NodeOpRecorder> op_recorder_;
     Metrics metrics_ {};
 };
 

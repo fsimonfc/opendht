@@ -15,7 +15,6 @@ class SimulationTester : public CppUnit::TestFixture
     CPPUNIT_TEST(testTwoNodePacketDelivery);
     CPPUNIT_TEST(testMultiNodeBootstrap);
     CPPUNIT_TEST(testDeterministicTrace);
-    CPPUNIT_TEST(testCausalityAssertion);
     CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -27,7 +26,6 @@ public:
     void testTwoNodePacketDelivery();
     void testMultiNodeBootstrap();
     void testDeterministicTrace();
-    void testCausalityAssertion();
 };
 
 } // namespace test

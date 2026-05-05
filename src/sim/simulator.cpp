@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "opendht/sim/simulator.h"
 #include "opendht/sim/identity_cache.h"
+#include "opendht/sim/node_op_recorder.h"
 #include "opendht/sim/packet_recorder.h"
 #include "opendht/sim/sim_logger.h"
 #include "opendht/sim/sim_network.h"
@@ -10,6 +11,7 @@
 
 #include "opendht/crypto.h"
 #include "opendht/infohash.h"
+#include "opendht/value.h"
 
 #include <cstdio>
 #include <stdexcept>
@@ -123,6 +125,12 @@ Simulator::buildNodes()
         recorder_ = JsonlPacketRecorder::openFile(cfg_.packet_recorder_file);
         break;
     }
+    if (cfg_.record_node_ops) {
+        if (!cfg_.node_ops_file.empty())
+            op_recorder_ = JsonlNodeOpRecorder::openFile(cfg_.node_ops_file);
+        else
+            op_recorder_ = std::make_shared<InMemoryNodeOpRecorder>();
+    }
     auto state = steady_state_;
     network_ = std::make_shared<SimNetwork>(
         cfg_.latency,
@@ -229,12 +237,7 @@ Simulator::bootstrapAll(std::chrono::milliseconds maxDuration)
     std::uniform_int_distribution<uint64_t> dist(0, maxDuration.count());
     for (size_t i = 1; i < nodes_.size(); ++i) {
         auto bootstrap_at = steady_state_->now + std::chrono::milliseconds {dist(rng_)};
-        enqueue(bootstrap_at, EventKind::Workload, [this, i]() {
-            auto& boot = *nodes_[0];
-            nodes_[i]->runner->bootstrap(boot.addr4);
-            nodes_[i]->runner->bootstrap(boot.addr6);
-            scheduleTick(i, steady_state_->now);
-        });
+        schedule(bootstrap_at, NodeOp {OpCode::Bootstrap, i, {}, 0, {}, {}, {}});
     }
 }
 
@@ -280,9 +283,52 @@ Simulator::rng()
 }
 
 void
-Simulator::scheduleAt(time_point at, std::function<void()> fn)
+Simulator::schedule(time_point at, NodeOp op)
 {
-    enqueue(at, EventKind::Workload, std::move(fn));
+    uint32_t a = static_cast<uint32_t>(op.node_id);
+    uint32_t b = static_cast<uint32_t>(op.code);
+    uint32_t c = static_cast<uint32_t>(op.payload.size());
+    enqueue(at, EventKind::Workload, [this, op = std::move(op)]() mutable { executeOp(std::move(op)); }, a, b, c);
+}
+
+void
+Simulator::schedule(NodeOp op)
+{
+    schedule(now(), std::move(op));
+}
+
+void
+Simulator::executeOp(NodeOp op)
+{
+    if (op_recorder_) {
+        op_recorder_->record(op, now(), next_seq_ - 1);
+    }
+    auto& n = node(op.node_id);
+    switch (op.code) {
+    case OpCode::Put: {
+        Value v(op.payload);
+        if (op.value_id)
+            v.id = op.value_id;
+        n.runner->put(op.key, std::move(v), op.on_done);
+        break;
+    }
+    case OpCode::Get:
+        n.runner->get(op.key, op.on_values, [](bool) {});
+        break;
+    case OpCode::Listen:
+        n.runner->listen(op.key, op.on_values);
+        break;
+    case OpCode::CancelListen:
+        n.runner->cancelListen(op.key, static_cast<size_t>(op.value_id));
+        break;
+    case OpCode::Bootstrap: {
+        auto& boot = node(0);
+        n.runner->bootstrap(boot.addr4);
+        n.runner->bootstrap(boot.addr6);
+        break;
+    }
+    }
+    scheduleTick(op.node_id, now());
 }
 
 std::shared_ptr<SimNetwork>
@@ -301,6 +347,12 @@ std::shared_ptr<PacketRecorder>
 Simulator::packetRecorder() const
 {
     return recorder_;
+}
+
+std::shared_ptr<NodeOpRecorder>
+Simulator::nodeOpRecorder() const
+{
+    return op_recorder_;
 }
 
 void

@@ -27,7 +27,7 @@ class SimSocket;
 class SimNetwork : public std::enable_shared_from_this<SimNetwork>
 {
 public:
-    struct Counters
+    struct Metrics
     {
         uint64_t packets_sent {0};
         uint64_t packets_dropped {0};
@@ -52,7 +52,7 @@ public:
 
     SimSocket* find(const SockAddr& addr);
 
-    const Counters& counters() const noexcept { return counters_; }
+    const Metrics& metrics() const noexcept { return metrics_; }
 
 private:
     std::chrono::milliseconds latency_;
@@ -62,7 +62,7 @@ private:
     std::shared_ptr<PacketRecorder> recorder_;
     std::function<std::chrono::steady_clock::time_point()> now_;
     std::unordered_map<std::string, SimSocket*> sockets_;
-    Counters counters_ {};
+    Metrics metrics_ {};
 };
 
 } // namespace sim

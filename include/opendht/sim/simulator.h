@@ -117,8 +117,8 @@ public:
     using clock = std::chrono::steady_clock;
     using time_point = clock::time_point;
 
-    /** Per-event-kind counters maintained by `runOne()`. */
-    struct Counters
+    /** Per-event-kind metrics maintained by `runOne()`. */
+    struct Metrics
     {
         uint64_t timer_events {0};
         uint64_t packet_events {0};
@@ -150,8 +150,8 @@ public:
 
     // ---- internals ----------------------------------------------------------
     std::shared_ptr<SimNetwork> network() const;
-    /** Per-event-kind counters. Use `network()->counters()` for packet/byte counters. */
-    const Counters& counters() const noexcept;
+    /** Per-event-kind metrics. Use `network()->metrics()` for packet/byte metrics. */
+    const Metrics& metrics() const noexcept;
     /** Active per-packet recorder (may be null when configured as `None`). */
     std::shared_ptr<PacketRecorder> packetRecorder() const;
     /** Schedule a Timer that calls `runner->loop()` on node `i` at `at`. */
@@ -196,7 +196,7 @@ private:
     std::vector<std::unique_ptr<SimNode>> nodes_;
     std::vector<TraceRecord> trace_;
     std::shared_ptr<PacketRecorder> recorder_;
-    Counters counters_ {};
+    Metrics metrics_ {};
 };
 
 } // namespace sim

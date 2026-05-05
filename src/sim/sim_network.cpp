@@ -67,11 +67,11 @@ SimNetwork::send(const SockAddr& src, const SockAddr& dst, const uint8_t* data, 
     }
 
     if (dropped) {
-        ++counters_.packets_dropped;
-        counters_.bytes_dropped += size;
+        ++metrics_.packets_dropped;
+        metrics_.bytes_dropped += size;
     } else {
-        ++counters_.packets_sent;
-        counters_.bytes_sent += size;
+        ++metrics_.packets_sent;
+        metrics_.bytes_sent += size;
     }
     if (recorder_) {
         auto t = now_ ? now_() : std::chrono::steady_clock::time_point {};

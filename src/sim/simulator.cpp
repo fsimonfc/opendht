@@ -59,13 +59,13 @@ Simulator::runOne()
     trace_.push_back(TraceRecord {e.time, e.kind, e.seq, e.a, e.b, e.c});
     switch (e.kind) {
     case EventKind::Timer:
-        ++counters_.timer_events;
+        ++metrics_.timer_events;
         break;
     case EventKind::PacketArrival:
-        ++counters_.packet_events;
+        ++metrics_.packet_events;
         break;
     case EventKind::Workload:
-        ++counters_.workload_events;
+        ++metrics_.workload_events;
         break;
     }
     e.run();
@@ -291,10 +291,10 @@ Simulator::network() const
     return network_;
 }
 
-const Simulator::Counters&
-Simulator::counters() const noexcept
+const Simulator::Metrics&
+Simulator::metrics() const noexcept
 {
-    return counters_;
+    return metrics_;
 }
 
 std::shared_ptr<PacketRecorder>

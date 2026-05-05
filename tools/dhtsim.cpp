@@ -42,7 +42,7 @@ printUsage(const char* prog)
                  "--drop P                    packet drop probability 0.0-1.0 (default 0)\n"
                  "--system-clock-skew-max MS  per-node systemNow() skew bound (default 0)\n"
                  "--packet-recorder-file PATH record packets as JSONL to PATH\n"
-                 "--counters                  print event/network counters at end\n"
+                 "--metrics                  print event/network metrics at end\n"
                  "--trace-hash                print hash of the event trace\n"
                  "--list-workloads            list available workloads and exit\n"
                  "-v, --verbose               enable per-node logging\n"
@@ -63,7 +63,7 @@ static const struct option long_options[] = {
     {"drop",                  required_argument, nullptr, 'D'},
     {"system-clock-skew-max", required_argument, nullptr, 'S'},
     {"packet-recorder-file",  required_argument, nullptr, 'r'},
-    {"counters",              no_argument,       nullptr, 'c'},
+    {"metrics",               no_argument,       nullptr, 'm'},
     {"verbose",               no_argument,       nullptr, 'v'},
     {"trace-hash",            no_argument,       nullptr, 't'},
     {"list-workloads",        no_argument,       nullptr, 'L'},
@@ -90,7 +90,7 @@ main(int argc, char** argv)
     bool use_identities = false;
     std::string identity_cache_dir;
 
-    bool print_counters = false;
+    bool print_metrics = false;
 
     int opt;
     while ((opt = getopt_long(argc, argv, "vh", long_options, nullptr)) != -1) {
@@ -130,8 +130,8 @@ main(int argc, char** argv)
             cfg.packet_recorder_file = optarg;
             cfg.packet_recorder = PacketRecorderKind::Jsonl;
             break;
-        case 'c':
-            print_counters = true;
+        case 'm':
+            print_metrics = true;
             break;
         case 'v':
             cfg.verbose = true;
@@ -194,9 +194,9 @@ main(int argc, char** argv)
     if (auto rec = sim.packetRecorder())
         rec->flush();
 
-    if (print_counters) {
-        const auto& nc = sim.network()->counters();
-        const auto& ec = sim.counters();
+    if (print_metrics) {
+        const auto& nc = sim.network()->metrics();
+        const auto& ec = sim.metrics();
         std::fprintf(stderr,
                      "network: packets_sent=%llu packets_dropped=%llu bytes_sent=%llu bytes_dropped=%llu\n"
                      "events:  timer=%llu packet=%llu workload=%llu\n",

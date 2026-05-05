@@ -14,6 +14,10 @@ namespace sim {
 namespace {
 using log_precision = std::chrono::microseconds;
 constexpr auto den = log_precision::period::den;
+
+constexpr std::string_view color_red = "\033[31m";
+constexpr std::string_view color_yellow = "\033[33m";
+constexpr std::string_view color_reset = "\033[39m";
 } // namespace
 
 std::shared_ptr<Logger>
@@ -25,10 +29,14 @@ makeSimLogger(std::shared_ptr<SimClock::SteadyState> state, size_t node_id, std:
     }
     auto node_tag = fmt::format("[node {:03d}] ", node_id);
     return std::make_shared<Logger>([state, out, node_tag = std::move(node_tag)](log::source_loc loc,
-                                                                                 log::LogLevel,
+                                                                                 log::LogLevel level,
                                                                                  std::string_view prefix,
                                                                                  std::string&& message) {
         auto num = std::chrono::duration_cast<log_precision>(state->now.time_since_epoch()).count();
+        if (level == log::LogLevel::error)
+            *out << color_red;
+        else if (level == log::LogLevel::warning)
+            *out << color_yellow;
         if (!loc.file.empty())
             fmt::print(*out,
                        "{}[{:06d}.{:06d} {:>20}:{:<5} {:<24}] {}",
@@ -41,7 +49,7 @@ makeSimLogger(std::shared_ptr<SimClock::SteadyState> state, size_t node_id, std:
                        prefix);
         else
             fmt::print(*out, "{}[{:06d}.{:06d}] {}", node_tag, num / den, num % den, prefix);
-        *out << message << std::endl;
+        *out << message << color_reset << std::endl;
     });
 }
 
